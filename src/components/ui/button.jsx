@@ -1,8 +1,3 @@
 import React from "react";
 
-// Placeholder Button component
-export const Button = (props) => {
-  return <button {...props}>Button</button>;
-};
-
-
+export const Button = (props) => <button {...props}>Button</button>;
