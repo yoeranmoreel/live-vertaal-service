@@ -2,6 +2,7 @@ import React from 'react'
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
 import Layout from './Layout'
 import { createPageUrl } from './utils'
+import './index.css';
 
 // Pages
 import Home from './pages/Home'
@@ -31,3 +32,4 @@ function App() {
 }
 
 export default App
+
