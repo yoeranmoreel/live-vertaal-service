@@ -1,9 +1,23 @@
-// src/components/ui/dialog.jsx
 import React from "react";
 
-export const Dialog = (props) => <div {...props}>Dialog</div>;
-export const DialogTrigger = (props) => <div {...props}>DialogTrigger</div>;
-export const DialogContent = (props) => <div {...props}>DialogContent</div>;
-export const DialogHeader = (props) => <div {...props}>DialogHeader</div>;
-export const DialogFooter = (props) => <div {...props}>DialogFooter</div>;
-export const DialogTitle = (props) => <div {...props}>DialogTitle</div>;
+export const Dialog = ({ children, open, ...props }) => (
+  open ? <div className="fixed inset-0 bg-black/50 flex items-center justify-center" {...props}>{children}</div> : null
+);
+
+export const DialogTrigger = ({ children, ...props }) => <button {...props}>{children}</button>;
+
+export const DialogContent = ({ children, className = "", ...props }) => (
+  <div className={`bg-background rounded-lg shadow-lg p-4 ${className}`} {...props}>{children}</div>
+);
+
+export const DialogHeader = ({ children, className = "", ...props }) => (
+  <div className={`mb-2 font-semibold ${className}`} {...props}>{children}</div>
+);
+
+export const DialogFooter = ({ children, className = "", ...props }) => (
+  <div className={`mt-4 flex justify-end ${className}`} {...props}>{children}</div>
+);
+
+export const DialogTitle = ({ children, className = "", ...props }) => (
+  <h2 className={`text-lg font-bold mb-2 ${className}`} {...props}>{children}</h2>
+);
