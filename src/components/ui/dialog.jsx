@@ -1,23 +1,92 @@
-import React from "react";
+import * as React from "react"
+import { X } from "lucide-react"
 
-export const Dialog = ({ children, open, ...props }) => (
-  open ? <div className="fixed inset-0 bg-black/50 flex items-center justify-center" {...props}>{children}</div> : null
-);
+const Dialog = ({ open, onOpenChange, children }) => {
+  React.useEffect(() => {
+    if (open) {
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = 'unset'
+    }
+    return () => {
+      document.body.style.overflow = 'unset'
+    }
+  }, [open])
+  
+  if (!open) return null
+  
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div 
+        className="fixed inset-0 bg-black/50 backdrop-blur-sm"
+        onClick={() => onOpenChange(false)}
+      />
+      <div className="relative z-50">
+        {children}
+      </div>
+    </div>
+  )
+}
 
-export const DialogTrigger = ({ children, ...props }) => <button {...props}>{children}</button>;
+const DialogContent = React.forwardRef(({ className = "", children, onClose, ...props }, ref) => (
+  <div
+    ref={ref}
+    className={`relative bg-white rounded-lg shadow-lg border border-gray-200 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto ${className}`}
+    {...props}
+  >
+    {children}
+    {onClose && (
+      <button
+        onClick={onClose}
+        className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-white transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-gray-950 focus:ring-offset-2 disabled:pointer-events-none"
+      >
+        <X className="h-4 w-4" />
+        <span className="sr-only">Close</span>
+      </button>
+    )}
+  </div>
+))
+DialogContent.displayName = "DialogContent"
 
-export const DialogContent = ({ children, className = "", ...props }) => (
-  <div className={`bg-background rounded-lg shadow-lg p-4 ${className}`} {...props}>{children}</div>
-);
+const DialogHeader = ({ className = "", ...props }) => (
+  <div
+    className={`flex flex-col space-y-1.5 text-center sm:text-left p-6 ${className}`}
+    {...props}
+  />
+)
+DialogHeader.displayName = "DialogHeader"
 
-export const DialogHeader = ({ children, className = "", ...props }) => (
-  <div className={`mb-2 font-semibold ${className}`} {...props}>{children}</div>
-);
+const DialogFooter = ({ className = "", ...props }) => (
+  <div
+    className={`flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2 p-6 ${className}`}
+    {...props}
+  />
+)
+DialogFooter.displayName = "DialogFooter"
 
-export const DialogFooter = ({ children, className = "", ...props }) => (
-  <div className={`mt-4 flex justify-end ${className}`} {...props}>{children}</div>
-);
+const DialogTitle = React.forwardRef(({ className = "", ...props }, ref) => (
+  <h2
+    ref={ref}
+    className={`text-lg font-semibold leading-none tracking-tight ${className}`}
+    {...props}
+  />
+))
+DialogTitle.displayName = "DialogTitle"
 
-export const DialogTitle = ({ children, className = "", ...props }) => (
-  <h2 className={`text-lg font-bold mb-2 ${className}`} {...props}>{children}</h2>
-);
+const DialogDescription = React.forwardRef(({ className = "", ...props }, ref) => (
+  <p
+    ref={ref}
+    className={`text-sm text-gray-500 ${className}`}
+    {...props}
+  />
+))
+DialogDescription.displayName = "DialogDescription"
+
+export {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+}
