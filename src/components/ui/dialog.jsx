@@ -1,7 +1,7 @@
 import React from "react";
 
-export const Dialog = (props) => {
-  return <div {...props}>Dialog</div>;
-};
-
-
+export const Dialog = (props) => <div {...props}>Dialog</div>;
+export const DialogTrigger = (props) => <div {...props}>DialogTrigger</div>;
+export const DialogContent = (props) => <div {...props}>DialogContent</div>;
+export const DialogHeader = (props) => <div {...props}>DialogHeader</div>;
+export const DialogFooter = (props) => <div {...props}>DialogFooter</div>;
