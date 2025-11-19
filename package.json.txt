@@ -1,0 +1,28 @@
+{
+  "name": "live-vertaal-service",
+  "version": "2.0.0",
+  "description": "Real-time vertaling voor oudercontacten",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.22.0",
+    "@tanstack/react-query": "^5.28.0",
+    "framer-motion": "^11.0.0",
+    "date-fns": "^3.3.1",
+    "qrcode": "^1.5.3",
+    "lucide-react": "^0.263.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.2.1",
+    "vite": "^5.1.0",
+    "tailwindcss": "^3.4.1",
+    "autoprefixer": "^10.4.18",
+    "postcss": "^8.4.35"
+  }
+}

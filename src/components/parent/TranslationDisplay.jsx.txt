@@ -1,0 +1,125 @@
+// src/components/parent/TranslationDisplay.jsx
+import React from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { MessageSquare, Loader2, Volume2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+
+export default function TranslationDisplay({ 
+  originalText, 
+  translatedText, 
+  translating, 
+  selectedLanguage,
+  onSpeak 
+}) {
+  const isRTL = selectedLanguage === 'ar' || selectedLanguage === 'he' || selectedLanguage === 'fa' || selectedLanguage === 'ur';
+  
+  const languageNames = {
+    'nl': 'Nederlands',
+    'en': 'English',
+    'ar': 'العربية',
+    'pl': 'Polski',
+    'bg': 'Български',
+    'ro': 'Română',
+    'tr': 'Türkçe',
+    'uk': 'Українська',
+    'fr': 'Français',
+    'de': 'Deutsch',
+    'es': 'Español',
+    'it': 'Italiano',
+    'pt': 'Português',
+    'ru': 'Русский',
+    'zh': '中文',
+    'ja': '日本語',
+    'ko': '한국어',
+    'hi': 'हिन्दी',
+    'ur': 'اردو',
+    'fa': 'فارسی',
+    'he': 'עברית',
+    'th': 'ไทย',
+    'vi': 'Tiếng Việt'
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Original Text */}
+      <div className="p-6 rounded-2xl bg-gradient-to-r from-gray-50 to-gray-100 border border-gray-200">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <MessageSquare className="w-4 h-4 text-gray-500" />
+            <span className="text-sm font-medium text-gray-600">Origineel (Nederlands)</span>
+          </div>
+        </div>
+        <AnimatePresence mode="wait">
+          {originalText ? (
+            <motion.p
+              key={originalText}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="text-gray-700 leading-relaxed"
+            >
+              {originalText}
+            </motion.p>
+          ) : (
+            <div className="flex items-center gap-2 text-gray-400">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              <span className="text-sm">Wacht op de leerkracht...</span>
+            </div>
+          )}
+        </AnimatePresence>
+      </div>
+
+      {/* Translation */}
+      <div 
+        className="p-8 rounded-2xl bg-gradient-to-br from-indigo-50 via-sky-50 to-emerald-50 border-2 border-indigo-200 shadow-lg"
+        dir={isRTL ? 'rtl' : 'ltr'}
+      >
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 bg-gradient-to-br from-indigo-500 to-sky-500 rounded-lg flex items-center justify-center">
+              <MessageSquare className="w-4 h-4 text-white" />
+            </div>
+            <span className="text-sm font-medium text-indigo-700">
+              Vertaling ({languageNames[selectedLanguage] || selectedLanguage})
+            </span>
+          </div>
+          {translatedText && onSpeak && (
+            <Button
+              onClick={onSpeak}
+              size="sm"
+              variant="ghost"
+              className="rounded-lg hover:bg-indigo-100"
+            >
+              <Volume2 className="w-4 h-4 mr-1" />
+              <span className="text-sm">Afspelen</span>
+            </Button>
+          )}
+        </div>
+        
+        <AnimatePresence mode="wait">
+          {translating ? (
+            <div className="flex items-center gap-3 text-indigo-600">
+              <Loader2 className="w-5 h-5 animate-spin" />
+              <span className="text-lg">Aan het vertalen...</span>
+            </div>
+          ) : translatedText ? (
+            <motion.p
+              key={translatedText}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="text-xl md:text-2xl font-medium text-gray-900 leading-relaxed"
+            >
+              {translatedText}
+            </motion.p>
+          ) : (
+            <div className="flex items-center gap-2 text-gray-400">
+              <Loader2 className="w-5 h-5 animate-spin" />
+              <span>Wacht op vertaling...</span>
+            </div>
+          )}
+        </AnimatePresence>
+      </div>
+    </div>
+  );
+}

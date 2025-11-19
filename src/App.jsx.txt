@@ -1,0 +1,33 @@
+import React from 'react'
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
+import Layout from './Layout'
+import { createPageUrl } from './utils'
+
+// Pages
+import Home from './pages/Home'
+import TeacherAuth from './pages/TeacherAuth'
+import TeacherDashboard from './pages/TeacherDashboard'
+import TeacherLive from './pages/TeacherLive'
+import ParentJoin from './pages/ParentJoin'
+import ParentView from './pages/ParentView'
+
+function App() {
+  return (
+    <Router>
+      <Layout>
+        <Routes>
+          <Route path={createPageUrl("Home")} element={<Home />} />
+          <Route path={createPageUrl("TeacherAuth")} element={<TeacherAuth />} />
+          <Route path={createPageUrl("TeacherDashboard")} element={<TeacherDashboard />} />
+          <Route path={createPageUrl("TeacherLive")} element={<TeacherLive />} />
+          <Route path={createPageUrl("ParentJoin")} element={<ParentJoin />} />
+          <Route path={createPageUrl("ParentView")} element={<ParentView />} />
+          {/* Redirect root to Home */}
+          <Route path="*" element={<Home />} />
+        </Routes>
+      </Layout>
+    </Router>
+  )
+}
+
+export default App
