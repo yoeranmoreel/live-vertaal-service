@@ -1,23 +1,38 @@
-import React from "react";
+import * as React from "react"
 
-export const Alert = ({ children, type = "destructive", className = "", ...props }) => {
-  const base = "p-3 rounded-md mb-2";
+const Alert = React.forwardRef(({ className = "", variant = "default", ...props }, ref) => {
   const variants = {
-    destructive: "bg-destructive text-destructive-foreground",
-    muted: "bg-muted text-muted-foreground",
-    accent: "bg-accent text-accent-foreground",
-  };
+    default: "bg-white text-gray-950 border-gray-200",
+    destructive: "border-red-500/50 text-red-600 bg-red-50",
+  }
+  
   return (
-    <div className={`${base} ${variants[type]} ${className}`} {...props}>
-      {children}
-    </div>
-  );
-};
+    <div
+      ref={ref}
+      role="alert"
+      className={`relative w-full rounded-lg border p-4 ${variants[variant]} ${className}`}
+      {...props}
+    />
+  )
+})
+Alert.displayName = "Alert"
 
-export const AlertTitle = ({ children, className = "", ...props }) => (
-  <div className={`font-semibold mb-1 ${className}`} {...props}>{children}</div>
-);
+const AlertTitle = React.forwardRef(({ className = "", ...props }, ref) => (
+  <h5
+    ref={ref}
+    className={`mb-1 font-medium leading-none tracking-tight ${className}`}
+    {...props}
+  />
+))
+AlertTitle.displayName = "AlertTitle"
 
-export const AlertDescription = ({ children, className = "", ...props }) => (
-  <div className={`text-sm ${className}`} {...props}>{children}</div>
-);
+const AlertDescription = React.forwardRef(({ className = "", ...props }, ref) => (
+  <div
+    ref={ref}
+    className={`text-sm [&_p]:leading-relaxed ${className}`}
+    {...props}
+  />
+))
+AlertDescription.displayName = "AlertDescription"
+
+export { Alert, AlertTitle, AlertDescription }
