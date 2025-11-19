@@ -1,7 +1,3 @@
 import React from "react";
 
-export const Badge = (props) => {
-  return <span {...props}>Badge</span>;
-};
-
-
+export const Badge = (props) => <span {...props}>Badge</span>;
