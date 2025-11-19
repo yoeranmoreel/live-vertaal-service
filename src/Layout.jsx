@@ -111,12 +111,13 @@ export default function Layout({ children }) {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <div className="text-center text-sm text-gray-500">
             <p>Live Vertaal Service — Verbinding door communicatie</p>
-            <p className="mt-1">© 2024 - Ontwikkeld met ❤️ voor inclusief onderwijs door Yoeran Moreel</p>
+            <p className="mt-1">© 2025 - Ontwikkeld met ❤️ voor inclusief onderwijs door Yoeran Moreel</p>
           </div>
         </div>
       </footer>
     </div>
   );
 }
+
 
 
