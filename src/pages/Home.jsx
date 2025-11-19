@@ -55,7 +55,7 @@ export default function Home() {
             </h1>
             
             <p className="text-xl md:text-2xl text-gray-600 mb-8 max-w-3xl mx-auto leading-relaxed">
-              Overbrüg taalbarrières in oudercontacten met real-time vertaling.
+              Overbrug taalbarrières in oudercontacten met real-time vertaling.
               <br />
               <span className="text-gray-500">Nederlands • English • العربية</span>
             </p>
@@ -137,5 +137,6 @@ export default function Home() {
     </div>
   );
 }
+
 
 
