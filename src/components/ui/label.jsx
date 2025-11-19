@@ -1,7 +1,3 @@
 import React from "react";
 
-export const Label = (props) => {
-  return <label {...props}>Label</label>;
-};
-
-
+export const Label = (props) => <label {...props}>Label</label>;
