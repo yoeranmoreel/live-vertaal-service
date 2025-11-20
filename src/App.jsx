@@ -2,7 +2,7 @@ import React from 'react'
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
 import Layout from './Layout'
 import { createPageUrl } from './utils'
-import './index.css';
+import './index.css'
 
 // Pages
 import Home from './pages/Home'
@@ -12,6 +12,9 @@ import TeacherLive from './pages/TeacherLive'
 import ParentJoin from './pages/ParentJoin'
 import ParentView from './pages/ParentView'
 
+// NEW
+import ProtectedRoute from '@/components/auth/ProtectedRoute'
+
 function App() {
   return (
     <Router>
@@ -19,11 +22,31 @@ function App() {
         <Routes>
           <Route path={createPageUrl("Home")} element={<Home />} />
           <Route path={createPageUrl("TeacherAuth")} element={<TeacherAuth />} />
-          <Route path={createPageUrl("TeacherDashboard")} element={<TeacherDashboard />} />
-          <Route path={createPageUrl("TeacherLive")} element={<TeacherLive />} />
+
+          {/* PROTECTED ROUTES */}
+          <Route
+            path={createPageUrl("TeacherDashboard")}
+            element={
+              <ProtectedRoute>
+                <TeacherDashboard />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path={createPageUrl("TeacherLive")}
+            element={
+              <ProtectedRoute>
+                <TeacherLive />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Public */}
           <Route path={createPageUrl("ParentJoin")} element={<ParentJoin />} />
           <Route path={createPageUrl("ParentView")} element={<ParentView />} />
-          {/* Redirect root to Home */}
+
+          {/* Redirect unknown routes */}
           <Route path="*" element={<Home />} />
         </Routes>
       </Layout>
@@ -32,4 +55,3 @@ function App() {
 }
 
 export default App
-
