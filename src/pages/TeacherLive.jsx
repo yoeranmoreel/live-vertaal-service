@@ -2,12 +2,28 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { sessionsApi, messagesApi, translationApi } from "@/services/sheetsClient";
+import {
+  sessionsApi,
+  messagesApi,
+  translationApi,
+  teacherAuthClient
+} from "@/services/sheetsClient";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Mic, MicOff, StopCircle, Loader2, AlertCircle, Users, Languages, QrCode, Download, FileText } from "lucide-react";
+import {
+  Mic,
+  MicOff,
+  StopCircle,
+  Loader2,
+  AlertCircle,
+  Users,
+  Languages,
+  QrCode,
+  Download,
+  FileText
+} from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import QRCode from "qrcode";
 
@@ -15,8 +31,11 @@ export default function TeacherLive() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const urlParams = new URLSearchParams(window.location.search);
-  const sessionId = urlParams.get('session');
+  const sessionId = urlParams.get("session");
 
+  // auth / UI state
+  const [teacher, setTeacher] = useState(null);
+  const [verifying, setVerifying] = useState(true);
   const [listening, setListening] = useState(false);
   const [interimTranscript, setInterimTranscript] = useState("");
   const [error, setError] = useState(null);
@@ -24,51 +43,128 @@ export default function TeacherLive() {
   const [transcriptStarted, setTranscriptStarted] = useState(false);
   const [qrCodeUrl, setQrCodeUrl] = useState("");
   const recognitionRef = useRef(null);
+  const mountedRef = useRef(true);
+  const lastSentRef = useRef(0);
 
-  // Check microphone permission
   useEffect(() => {
-    const checkMicPermission = async () => {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        stream.getTracks().forEach(track => track.stop());
-        setMicPermission('granted');
-      } catch (err) {
-        setMicPermission('denied');
-        setError("Microfoon toegang geweigerd. Klik op het slotje in de adresbalk en sta microfoon toe.");
-      }
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
     };
-    
+  }, []);
+
+  // ----------------------------
+  // VERIFY TEACHER TOKEN + OWNERSHIP
+  // ----------------------------
+  useEffect(() => {
+    async function verifyAndLoad() {
+      setVerifying(true);
+      try {
+        const verifyResult = await teacherAuthClient.verify();
+        if (!verifyResult || !verifyResult.valid) {
+          // invalid token
+          teacherAuthClient.logout();
+          navigate(createPageUrl("TeacherAuth"));
+          return;
+        }
+        const profile = teacherAuthClient.getProfile();
+        if (!profile) {
+          teacherAuthClient.logout();
+          navigate(createPageUrl("TeacherAuth"));
+          return;
+        }
+        setTeacher(profile);
+      } catch (e) {
+        console.error("Auth verify failed:", e);
+        teacherAuthClient.logout();
+        navigate(createPageUrl("TeacherAuth"));
+      } finally {
+        if (mountedRef.current) setVerifying(false);
+      }
+    }
+
+    verifyAndLoad();
+  }, [navigate]);
+
+  // ----------------------------
+  // Microphone permission pre-check
+  // ----------------------------
+  useEffect(() => {
+    async function checkMicPermission() {
+      try {
+        // Try to request permission without keeping stream open
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        stream.getTracks().forEach((t) => t.stop());
+        if (mountedRef.current) setMicPermission("granted");
+      } catch (err) {
+        if (mountedRef.current) {
+          setMicPermission("denied");
+          setError(
+            "Microfoon toegang geweigerd. Klik op het slotje in de adresbalk en sta microfoon toe."
+          );
+        }
+      }
+    }
+
     checkMicPermission();
   }, []);
 
-  const { data: session, isLoading: sessionLoading } = useQuery({
-    queryKey: ['session', sessionId],
+  // ----------------------------
+  // Load session
+  // ----------------------------
+  const {
+    data: session,
+    isLoading: sessionLoading,
+    refetch: refetchSession
+  } = useQuery({
+    queryKey: ["session", sessionId],
     queryFn: async () => {
+      if (!sessionId) throw new Error("No session id");
       const sess = await sessionsApi.getById(sessionId);
-      if (!sess) throw new Error('Sessie niet gevonden');
+      if (!sess) throw new Error("Sessie niet gevonden");
       return sess;
     },
-    enabled: !!sessionId,
+    enabled: !!sessionId && !verifying && !!teacher,
+    retry: 1
   });
 
-  const { data: messages, isLoading: messagesLoading } = useQuery({
-    queryKey: ['messages', sessionId],
-    queryFn: () => messagesApi.getBySession(sessionId),
-    enabled: !!sessionId,
-    refetchInterval: 3000,
-    initialData: [],
-  });
-
-  // Generate QR code
+  // If loaded, ensure teacher owns this session
   useEffect(() => {
-    if (session) {
-      const joinUrl = `${window.location.origin}${createPageUrl("ParentView")}?session=${session.session_code}`;
-      QRCode.toDataURL(joinUrl, { width: 200, margin: 2 })
-        .then(url => setQrCodeUrl(url))
-        .catch(err => console.error('QR code generation failed:', err));
+    if (!session || !teacher) return;
+    if (String(session.created_by) !== String(teacher.email)) {
+      // not owner — redirect
+      alert("U bent geen eigenaar van deze sessie. U wordt teruggestuurd.");
+      navigate(createPageUrl("TeacherDashboard"));
     }
+  }, [session, teacher, navigate]);
+
+  // ----------------------------
+  // Load messages (polling)
+  // ----------------------------
+  const { data: messages = [], isLoading: messagesLoading } = useQuery({
+    queryKey: ["messages", sessionId],
+    queryFn: () => (sessionId ? messagesApi.getBySession(sessionId) : []),
+    enabled: !!sessionId && !!teacher,
+    refetchInterval: 3000,
+    initialData: []
+  });
+
+  // ----------------------------
+  // QR Code generation
+  // ----------------------------
+  useEffect(() => {
+    if (!session) return;
+    const joinUrl = `${window.location.origin}${createPageUrl("ParentView")}?session=${session.session_code}`;
+    QRCode.toDataURL(joinUrl, { width: 200, margin: 2 })
+      .then((url) => {
+        if (mountedRef.current) setQrCodeUrl(url);
+      })
+      .catch((err) => console.error("QR code generation failed:", err));
   }, [session]);
 
+  // ----------------------------
+  // Mutations: create message + update session
+  // ----------------------------
   const createMessageMutation = useMutation({
     mutationFn: async (originalText) => {
       return await messagesApi.create({
@@ -77,29 +173,30 @@ export default function TeacherLive() {
       });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['messages', sessionId] });
-    },
+      queryClient.invalidateQueries({ queryKey: ["messages", sessionId] });
+    }
   });
 
   const endSessionMutation = useMutation({
     mutationFn: async () => {
-      // Download PDF eerst
-      await handleDownloadTeacherPdf();
-      
-      // Dan sessie beëindigen
+      // finalize and end
       return await sessionsApi.update(sessionId, {
-        status: 'ended',
+        status: "ended",
         ended_date: new Date().toISOString()
       });
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["sessions"] });
       navigate(createPageUrl("TeacherDashboard"));
-    },
+    }
   });
 
-  // Speech recognition setup
+  // ----------------------------
+  // Speech recognition core (improved lifecycle)
+  // ----------------------------
   useEffect(() => {
-    if (!sessionId || !transcriptStarted) return;
+    // only run when sessionId and transcriptStarted are true and teacher is verified
+    if (!sessionId || !transcriptStarted || !teacher) return;
 
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
@@ -107,66 +204,94 @@ export default function TeacherLive() {
       return;
     }
 
+    // don't start if session already ended
+    if (session && session.status === "ended") {
+      setError("Deze sessie is beëindigd. U kunt geen transcript starten.");
+      setTranscriptStarted(false);
+      return;
+    }
+
     const recognition = new SpeechRecognition();
-    recognition.lang = 'nl-NL';
+    recognition.lang = "nl-NL";
     recognition.interimResults = true;
     recognition.continuous = true;
     recognition.maxAlternatives = 1;
 
+    let bufferFinal = "";
+
     recognition.onstart = () => {
+      if (!mountedRef.current) return;
       setListening(true);
       setError(null);
     };
 
     recognition.onresult = (event) => {
+      if (!mountedRef.current) return;
       let interim = "";
-      let final = "";
-      
+      let finalChunk = "";
+
       for (let i = event.resultIndex; i < event.results.length; i++) {
-        const transcript = event.results[i][0].transcript;
-        if (event.results[i].isFinal) {
-          final += transcript + " ";
+        const r = event.results[i];
+        const text = r[0].transcript;
+        if (r.isFinal) {
+          finalChunk += text + " ";
         } else {
-          interim += transcript;
+          interim += text;
         }
       }
-      
+
       setInterimTranscript(interim);
-      
-      if (final.trim()) {
-        createMessageMutation.mutate(final.trim());
-        setInterimTranscript("");
+
+      if (finalChunk.trim()) {
+        bufferFinal += finalChunk;
+        // throttle sends to avoid too many writes — at most once per 700ms
+        const now = Date.now();
+        if (now - lastSentRef.current > 700) {
+          lastSentRef.current = now;
+          try {
+            createMessageMutation.mutate(bufferFinal.trim());
+            bufferFinal = "";
+          } catch (e) {
+            console.error("Failed to send final transcript:", e);
+          }
+          setInterimTranscript("");
+        } else {
+          // if too frequent, wait a bit and flush later
+          setTimeout(() => {
+            if (!mountedRef.current) return;
+            if (bufferFinal.trim()) {
+              createMessageMutation.mutate(bufferFinal.trim());
+              bufferFinal = "";
+              setInterimTranscript("");
+            }
+          }, 800);
+        }
       }
     };
 
     recognition.onerror = (event) => {
-      if (event.error === 'not-allowed') {
+      if (!mountedRef.current) return;
+      if (event.error === "not-allowed") {
         setError("Microfoon toegang geweigerd. Klik op het slotje in de adresbalk en sta microfoon toe.");
-        setMicPermission('denied');
-      } else if (event.error === 'no-speech') {
-        // Ignore, continue listening
-      } else if (event.error === 'aborted') {
-        // Restart
+        setMicPermission("denied");
+      } else if (event.error === "no-speech") {
+        // ignore
       } else {
+        console.warn("SpeechRecognition error:", event.error);
         setError("Spraakherkenning fout: " + event.error);
       }
     };
 
     recognition.onend = () => {
-      if (transcriptStarted && listening) {
+      if (!mountedRef.current) return;
+      setListening(false);
+      // auto-restart only when transcriptStarted still true
+      if (transcriptStarted) {
         try {
           recognition.start();
-        } catch (e) {
-          setTimeout(() => {
-            try {
-              recognition.start();
-            } catch (err) {
-              console.error("Failed to restart:", err);
-            }
-          }, 100);
+        } catch (err) {
+          console.warn("Failed to restart recognition:", err);
         }
-      } else {
-        setListening(false);
       }
     };
 
@@ -176,146 +301,167 @@ export default function TeacherLive() {
       recognition.start();
     } catch (e) {
       console.error("Error starting recognition:", e);
+      setError("Kon spraakherkenning niet starten.");
     }
 
     return () => {
       try {
-        recognition.stop();
-      } catch (e) {}
+        recognition.onend = null;
+        recognition.onerror = null;
+        recognition.onresult = null;
+        recognition.stop && recognition.stop();
+      } catch (e) {
+        /* ignore cleanup errors */
+      }
     };
-  }, [sessionId, transcriptStarted]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId, transcriptStarted, teacher, session]);
 
-  const handleStartTranscript = () => {
+  // ----------------------------
+  // Handlers
+  // ----------------------------
+  const handleStartTranscript = async () => {
+    if (!teacher) {
+      alert("U moet ingelogd zijn om te beginnen.");
+      navigate(createPageUrl("TeacherAuth"));
+      return;
+    }
+
+    if (session && session.status === "ended") {
+      alert("Deze sessie is al beëindigd.");
+      return;
+    }
+
+    setError(null);
     setTranscriptStarted(true);
   };
 
   const handleStopTranscript = () => {
     setTranscriptStarted(false);
+    setInterimTranscript("");
     if (recognitionRef.current) {
       try {
         recognitionRef.current.stop();
-      } catch (e) {}
+      } catch (e) {
+        console.warn("stop recognition failed:", e);
+      }
     }
   };
 
   const handleEndSession = async () => {
-    if (confirm('Weet u zeker dat u deze sessie wilt beëindigen? U ontvangt automatisch een PDF transcript.')) {
-      handleStopTranscript();
+    if (!confirm("Weet u zeker dat u deze sessie wilt beëindigen? U ontvangt automatisch een PDF transcript.")) return;
+    // First stop transcript to flush recognition
+    handleStopTranscript();
+
+    // Re-fetch messages to ensure we include latest ones in PDF
+    await queryClient.invalidateQueries({ queryKey: ["messages", sessionId] });
+    await queryClient.refetchQueries({ queryKey: ["messages", sessionId] });
+
+    // Build PDF (open print view) then end session
+    try {
+      await handleDownloadTeacherPdf();
+    } catch (e) {
+      console.warn("PDF generation error:", e);
+      // continue to end session anyway
+    }
+
+    try {
       await endSessionMutation.mutateAsync();
+    } catch (e) {
+      console.error("Failed to end session", e);
+      alert("Kon sessie niet beëindigen. Probeer het opnieuw.");
     }
   };
 
+  // ----------------------------
+  // PDF / print view
+  // ----------------------------
   const handleDownloadTeacherPdf = async () => {
-    if (!session || !messages || messages.length === 0) return;
-    
-    const printWindow = window.open('', '_blank');
-    
-    printWindow.document.write(`
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta charset="UTF-8">
-        <title>Leerkracht Transcript - ${session.session_code}</title>
-        <style>
-          body { 
-            font-family: Arial, sans-serif; 
-            max-width: 800px; 
-            margin: 40px auto; 
-            padding: 20px;
-          }
-          h1 { color: #4F46E5; border-bottom: 2px solid #4F46E5; padding-bottom: 10px; }
-          .meta { color: #666; margin-bottom: 30px; background: #f9fafb; padding: 15px; border-radius: 8px; }
-          .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-bottom: 30px; }
-          .stat-box { background: #f9fafb; padding: 15px; border-radius: 8px; text-align: center; }
-          .stat-value { font-size: 24px; font-weight: bold; color: #4F46E5; }
-          .stat-label { font-size: 12px; color: #666; margin-top: 5px; }
-          .message { 
-            margin-bottom: 20px; 
-            padding: 15px; 
-            background: #f9fafb; 
-            border-left: 4px solid #4F46E5;
-            border-radius: 4px;
-          }
-          .timestamp { color: #999; font-size: 12px; margin-bottom: 5px; }
-          .text { line-height: 1.6; }
-          .footer { 
-            margin-top: 40px; 
-            padding-top: 20px; 
-            border-top: 1px solid #ddd; 
-            text-align: center; 
-            color: #666; 
-            font-size: 12px;
-          }
-          .language-breakdown { margin-bottom: 30px; }
-          .language-item { 
-            display: flex; 
-            justify-content: space-between; 
-            padding: 8px; 
-            background: #f9fafb; 
-            margin-bottom: 5px;
-            border-radius: 4px;
-          }
-        </style>
-      </head>
-      <body>
-        <h1>🎓 Leerkracht Transcript</h1>
-        <div class="meta">
-          <p><strong>Sessie:</strong> ${session.session_code}</p>
-          <p><strong>Leerkracht:</strong> ${session.teacher_name}</p>
-          <p><strong>Datum:</strong> ${new Date(session.created_date).toLocaleString('nl-NL')}</p>
-          ${session.ended_date ? `<p><strong>Beëindigd:</strong> ${new Date(session.ended_date).toLocaleString('nl-NL')}</p>` : ''}
-        </div>
-        
-        <div class="stats">
-          <div class="stat-box">
-            <div class="stat-value">${session.total_participants || 0}</div>
-            <div class="stat-label">Ouders aanwezig</div>
-          </div>
-          <div class="stat-box">
-            <div class="stat-value">${messages.length}</div>
-            <div class="stat-label">Berichten gesproken</div>
-          </div>
-          <div class="stat-box">
-            <div class="stat-value">${Object.keys(session.language_stats || {}).length}</div>
-            <div class="stat-label">Verschillende talen</div>
-          </div>
-        </div>
+    // ensure latest messages fetched
+    await queryClient.invalidateQueries({ queryKey: ["messages", sessionId] });
+    const latestMessages = await messagesApi.getBySession(sessionId);
 
-        ${Object.keys(session.language_stats || {}).length > 0 ? `
-          <div class="language-breakdown">
-            <h3>Taalverdeling</h3>
-            ${Object.entries(session.language_stats).map(([lang, count]) => {
-              const langNames = { 'nl': '🇳🇱 Nederlands', 'en': '🇬🇧 Engels', 'ar': '🇸🇦 Arabisch', 'pl': '🇵🇱 Pools', 'bg': '🇧🇬 Bulgaars', 'ro': '🇷🇴 Roemeens', 'tr': '🇹🇷 Turks', 'uk': '🇺🇦 Oekraïens' };
-              return `<div class="language-item">
-                <span>${langNames[lang] || lang}</span>
-                <span><strong>${count}</strong> ouder${count !== 1 ? 's' : ''}</span>
-              </div>`;
-            }).join('')}
-          </div>
-        ` : ''}
-        
-        <h3>Gesprek Transcript (Nederlands)</h3>
-        ${messages.map(msg => `
-          <div class="message">
-            <div class="timestamp">${new Date(msg.created_date).toLocaleTimeString('nl-NL')}</div>
-            <div class="text">${msg.original_text}</div>
-          </div>
-        `).join('')}
-        
-        <div class="footer">
-          <p><strong>Live Vertaal Service</strong> © ${new Date().getFullYear()}</p>
-          <p>Ontwikkeld met ❤️ voor inclusief onderwijs door Yoeran Moreel</p>
-          <p style="margin-top: 10px; color: #999;">Dit transcript is automatisch gegenereerd tijdens het oudercontact</p>
-        </div>
-      </body>
-      </html>
-    `);
-    
+    if (!session || !latestMessages || latestMessages.length === 0) {
+      alert("Geen berichten om te downloaden.");
+      return;
+    }
+
+    const printWindow = window.open("", "_blank", "noopener");
+    if (!printWindow) {
+      alert("Popup geblokkeerd. Sta popups toe om het transcript te downloaden.");
+      return;
+    }
+
+    const languageStatsHtml = Object.keys(session.language_stats || {}).length
+      ? `<div class="language-breakdown">
+          <h3>Taalverdeling</h3>
+          ${Object.entries(session.language_stats || {}).map(([lang, count]) => {
+            const langNames = { nl: "🇳🇱 Nederlands", en: "🇬🇧 Engels", ar: "🇸🇦 Arabisch", pl: "🇵🇱 Pools", bg: "🇧🇬 Bulgaars", ro: "🇷🇴 Roemeens", tr: "🇹🇷 Turks", uk: "🇺🇦 Oekraïens" };
+            return `<div class="language-item"><span>${langNames[lang] || lang}</span><span><strong>${count}</strong> ouder${count !== 1 ? "s" : ""}</span></div>`;
+          }).join("")}
+        </div>`
+      : "";
+
+    printWindow.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Leerkracht Transcript - ${session.session_code}</title>
+      <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 40px auto; padding: 20px; }
+        h1 { color: #4F46E5; border-bottom: 2px solid #4F46E5; padding-bottom: 10px; }
+        .meta { color: #666; margin-bottom: 30px; background: #f9fafb; padding: 15px; border-radius: 8px; }
+        .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-bottom: 30px; }
+        .stat-box { background: #f9fafb; padding: 15px; border-radius: 8px; text-align: center; }
+        .stat-value { font-size: 24px; font-weight: bold; color: #4F46E5; }
+        .stat-label { font-size: 12px; color: #666; margin-top: 5px; }
+        .message { margin-bottom: 20px; padding: 15px; background: #f9fafb; border-left: 4px solid #4F46E5; border-radius: 4px; }
+        .timestamp { color: #999; font-size: 12px; margin-bottom: 5px; }
+        .text { line-height: 1.6; }
+        .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #ddd; text-align: center; color: #666; font-size: 12px; }
+        .language-item { display:flex; justify-content:space-between; padding:8px; background:#f9fafb; margin-bottom:5px; border-radius:4px; }
+      </style>
+      </head><body>
+      <h1>🎓 Leerkracht Transcript</h1>
+      <div class="meta">
+        <p><strong>Sessie:</strong> ${session.session_code}</p>
+        <p><strong>Leerkracht:</strong> ${session.teacher_name}</p>
+        <p><strong>Datum:</strong> ${new Date(session.created_date).toLocaleString('nl-NL')}</p>
+        ${session.ended_date ? `<p><strong>Beëindigd:</strong> ${new Date(session.ended_date).toLocaleString('nl-NL')}</p>` : ""}
+      </div>
+      <div class="stats">
+        <div class="stat-box"><div class="stat-value">${session.total_participants || 0}</div><div class="stat-label">Ouders aanwezig</div></div>
+        <div class="stat-box"><div class="stat-value">${latestMessages.length}</div><div class="stat-label">Berichten gesproken</div></div>
+        <div class="stat-box"><div class="stat-value">${Object.keys(session.language_stats || {}).length}</div><div class="stat-label">Verschillende talen</div></div>
+      </div>
+      ${languageStatsHtml}
+      <h3>Gesprek Transcript (Nederlands)</h3>
+      ${latestMessages.map(msg => `<div class="message"><div class="timestamp">${new Date(msg.created_date).toLocaleTimeString('nl-NL')}</div><div class="text">${escapeHtml(msg.original_text)}</div></div>`).join("")}
+      <div class="footer"><p><strong>Live Vertaal Service</strong> © ${new Date().getFullYear()}</p><p>Ontwikkeld met ❤️ voor inclusief onderwijs door Yoeran Moreel</p></div>
+      </body></html>`);
+
     printWindow.document.close();
-    setTimeout(() => printWindow.print(), 250);
+    setTimeout(() => {
+      try {
+        printWindow.focus();
+        printWindow.print();
+      } catch (e) {
+        console.warn("Print failed:", e);
+      }
+    }, 300);
   };
 
-  if (sessionLoading) {
+  // small helper escape to avoid breaking HTML in print view
+  function escapeHtml(unsafe) {
+    if (!unsafe) return "";
+    return unsafe
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  }
+
+  // ----------------------------
+  // Loading / error UI
+  // ----------------------------
+  if (verifying || sessionLoading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
@@ -338,6 +484,9 @@ export default function TeacherLive() {
   const languageStats = session.language_stats || {};
   const totalParticipants = session.total_participants || 0;
 
+  // ----------------------------
+  // Main UI (keeps your layout exactly)
+  // ----------------------------
   return (
     <div className="max-w-6xl mx-auto">
       <div className="grid md:grid-cols-3 gap-6">
@@ -357,7 +506,7 @@ export default function TeacherLive() {
                   <img src={qrCodeUrl} alt="QR Code" className="w-48 h-48" />
                 </div>
               )}
-              
+
               <div className="text-center space-y-2">
                 <p className="text-sm text-gray-600">Sessiecode:</p>
                 <p className="text-3xl font-bold font-mono text-indigo-600">{session.session_code}</p>
@@ -375,20 +524,16 @@ export default function TeacherLive() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              {micPermission === 'denied' && (
+              {micPermission === "denied" && (
                 <Alert variant="destructive">
                   <AlertCircle className="h-4 w-4" />
-                  <AlertDescription className="text-sm">
-                    Microfoon toegang geweigerd. Klik op het slotje in de adresbalk.
-                  </AlertDescription>
+                  <AlertDescription className="text-sm">Microfoon toegang geweigerd. Klik op het slotje in de adresbalk.</AlertDescription>
                 </Alert>
               )}
 
-              {micPermission === 'granted' && !transcriptStarted && (
+              {micPermission === "granted" && !transcriptStarted && (
                 <Alert>
-                  <AlertDescription className="text-sm">
-                    Microfoon is klaar. Start transcript om te beginnen.
-                  </AlertDescription>
+                  <AlertDescription className="text-sm">Microfoon is klaar. Start transcript om te beginnen.</AlertDescription>
                 </Alert>
               )}
 
@@ -400,40 +545,23 @@ export default function TeacherLive() {
 
               <div className="space-y-2">
                 {transcriptStarted ? (
-                  <Button
-                    onClick={handleStopTranscript}
-                    variant="outline"
-                    className="w-full py-6 rounded-xl border-2"
-                  >
+                  <Button onClick={handleStopTranscript} variant="outline" className="w-full py-6 rounded-xl border-2">
                     <MicOff className="w-5 h-5 mr-2" />
                     Stop Transcript
                   </Button>
                 ) : (
-                  <Button
-                    onClick={handleStartTranscript}
-                    disabled={micPermission !== 'granted'}
-                    className="w-full bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white font-semibold py-6 rounded-xl"
-                  >
+                  <Button onClick={handleStartTranscript} disabled={micPermission !== "granted" || session.status === "ended"} className="w-full bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white font-semibold py-6 rounded-xl">
                     <Mic className="w-5 h-5 mr-2" />
                     Start Transcript
                   </Button>
                 )}
 
-                <Button
-                  onClick={handleDownloadTeacherPdf}
-                  disabled={!messages || messages.length === 0}
-                  variant="outline"
-                  className="w-full py-6 rounded-xl"
-                >
+                <Button onClick={handleDownloadTeacherPdf} disabled={!messages || messages.length === 0} variant="outline" className="w-full py-6 rounded-xl">
                   <Download className="w-5 h-5 mr-2" />
                   Download PDF
                 </Button>
 
-                <Button
-                  onClick={handleEndSession}
-                  variant="destructive"
-                  className="w-full py-6 rounded-xl font-semibold"
-                >
+                <Button onClick={handleEndSession} variant="destructive" className="w-full py-6 rounded-xl font-semibold">
                   <StopCircle className="w-5 h-5 mr-2" />
                   Sessie Beëindigen
                 </Button>
@@ -467,12 +595,12 @@ export default function TeacherLive() {
                     Gekozen talen:
                   </div>
                   {Object.entries(languageStats).map(([lang, count]) => {
-                    const langEmojis = { 'nl': '🇳🇱', 'en': '🇬🇧', 'ar': '🇸🇦', 'pl': '🇵🇱', 'bg': '🇧🇬', 'ro': '🇷🇴', 'tr': '🇹🇷', 'uk': '🇺🇦' };
-                    const langNames = { 'nl': 'NL', 'en': 'EN', 'ar': 'AR', 'pl': 'PL', 'bg': 'BG', 'ro': 'RO', 'tr': 'TR', 'uk': 'UK' };
+                    const langEmojis = { nl: "🇳🇱", en: "🇬🇧", ar: "🇸🇦", pl: "🇵🇱", bg: "🇧🇬", ro: "🇷🇴", tr: "🇹🇷", uk: "🇺🇦" };
+                    const langNames = { nl: "NL", en: "EN", ar: "AR", pl: "PL", bg: "BG", ro: "RO", tr: "TR", uk: "UK" };
                     return (
                       <div key={lang} className="flex items-center justify-between p-2 rounded-lg bg-gray-50">
                         <span className="flex items-center gap-2">
-                          <span className="text-xl">{langEmojis[lang] || '🌍'}</span>
+                          <span className="text-xl">{langEmojis[lang] || "🌍"}</span>
                           <span className="text-sm font-medium">{langNames[lang] || lang}</span>
                         </span>
                         <span className="text-sm font-bold text-gray-700">{count}</span>
@@ -495,7 +623,7 @@ export default function TeacherLive() {
                   Live Transcript
                 </span>
                 <span className="text-sm font-normal text-gray-500">
-                  {messages?.length || 0} bericht{messages?.length !== 1 ? 'en' : ''}
+                  {messages?.length || 0} bericht{messages?.length !== 1 ? "en" : ""}
                 </span>
               </CardTitle>
             </CardHeader>
@@ -519,7 +647,7 @@ export default function TeacherLive() {
                       <div className="flex items-start justify-between gap-3 mb-2">
                         <p className="text-gray-900 flex-1 leading-relaxed">{msg.original_text}</p>
                         <span className="text-xs text-gray-400 whitespace-nowrap">
-                          {new Date(msg.created_date).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })}
+                          {new Date(msg.created_date).toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit" })}
                         </span>
                       </div>
                     </motion.div>
@@ -533,4 +661,3 @@ export default function TeacherLive() {
     </div>
   );
 }
-
