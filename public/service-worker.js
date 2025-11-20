@@ -1,18 +1,16 @@
+// --------------------------------------
+// SERVICE WORKER: LVS SAFE VERSION
+// --------------------------------------
+
+// Direct updaten bij nieuwe deploy
 self.addEventListener("install", (event) => {
-  console.log("Service Worker installed");
-  self.skipWaiting();
-});
+  console.log("[SW] Installed");
+  self.skipWaiting(); // Activeer nieuwe versie direct
 
-self.addEventListener("activate", (event) => {
-  console.log("Service Worker activated");
-  clients.claim();
-});
+  // Optionele simpele cache
+  const CACHE_NAME = "lvs-cache-v1";
+  const urlsToCache = ["/", "/index.html"];
 
-// Optioneel: simpele cache voor offline starten
-const CACHE_NAME = "lvs-cache-v1";
-const urlsToCache = ["/", "/index.html"];
-
-self.addEventListener("install", (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
       return cache.addAll(urlsToCache);
@@ -20,10 +18,30 @@ self.addEventListener("install", (event) => {
   );
 });
 
+self.addEventListener("activate", (event) => {
+  console.log("[SW] Activated");
+  event.waitUntil(clients.claim()); // Neem alle tabs direct over
+
+  // Oude caches opruimen
+  const whitelist = ["lvs-cache-v1"];
+  event.waitUntil(
+    caches.keys().then((keys) =>
+      Promise.all(
+        keys.map((key) => {
+          if (!whitelist.includes(key)) {
+            return caches.delete(key);
+          }
+        })
+      )
+    )
+  );
+});
+
+// Offline fallback (extreem basic)
 self.addEventListener("fetch", (event) => {
   event.respondWith(
-    caches.match(event.request).then((response) => {
-      return response || fetch(event.request);
+    caches.match(event.request).then((cached) => {
+      return cached || fetch(event.request);
     })
   );
 });
