@@ -2,17 +2,17 @@ import React from "react";
 import { Link, useLocation } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { Languages, LogOut, Home } from "lucide-react";
+import { teacherAuthClient } from "@/services/sheetsClient";
 
 export default function Layout({ children }) {
   const location = useLocation();
   const isHome = location.pathname === createPageUrl("Home");
-  
-  // Check for teacher login
-  const teacherData = localStorage.getItem("lvs_teacher");
-  const teacher = teacherData ? JSON.parse(teacherData) : null;
 
-  const handleLogout = () => {
-    localStorage.removeItem("lvs_teacher");
+  // Nieuwe veilige auth: haal profiel op via teacherAuthClient
+  const teacher = teacherAuthClient.getProfile();
+
+  const handleLogout = async () => {
+    await teacherAuthClient.logout();  // Verwijdert token + profiel in localStorage
     window.location.href = createPageUrl("Home");
   };
 
@@ -37,7 +37,7 @@ export default function Layout({ children }) {
           border: 1px solid rgba(255, 255, 255, 0.3);
         }
 
-        /* Hide base44 badge with multiple selectors */
+        /* Hide base44 badge */
         #base44-badge,
         [id*="base44"],
         [class*="base44"],
@@ -69,16 +69,17 @@ export default function Layout({ children }) {
               </Link>
 
               <div className="flex items-center gap-3">
-                {teacher && (
+                {teacher ? (
                   <>
                     <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/50">
                       <div className="w-7 h-7 rounded-full bg-gradient-to-br from-indigo-400 to-sky-400 flex items-center justify-center">
                         <span className="text-xs font-semibold text-white">
-                          {teacher.fullName?.[0]?.toUpperCase() || 'L'}
+                          {teacher.fullName?.[0]?.toUpperCase() || "L"}
                         </span>
                       </div>
                       <span className="text-sm font-medium text-gray-700">{teacher.fullName}</span>
                     </div>
+
                     <button
                       onClick={handleLogout}
                       className="p-2 rounded-xl hover:bg-white/50 transition-colors duration-200"
@@ -87,8 +88,7 @@ export default function Layout({ children }) {
                       <LogOut className="w-5 h-5 text-gray-600" />
                     </button>
                   </>
-                )}
-                {!teacher && (
+                ) : (
                   <Link to={createPageUrl("Home")}>
                     <button className="p-2 rounded-xl hover:bg-white/50 transition-colors duration-200">
                       <Home className="w-5 h-5 text-gray-600" />
@@ -118,6 +118,3 @@ export default function Layout({ children }) {
     </div>
   );
 }
-
-
-
