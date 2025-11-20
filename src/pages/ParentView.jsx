@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { sessionsApi, messagesApi, translationApi, participantTracker } from "@/service/sheetsClient";
+import { sessionsApi, messagesApi, translationApi, participantTracker } from "@/services/sheetsClient";
 import { useQuery } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
@@ -337,4 +337,5 @@ export default function ParentView() {
     </div>
   );
 }
+
 
