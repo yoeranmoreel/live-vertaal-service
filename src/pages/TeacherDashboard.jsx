@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { sessionsApi, teacherAuth, generateSessionCode } from "@/api/sheetsClient";
+import { sessionsApi, teacherAuth, generateSessionCode } from "@/services/sheetsClient";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
@@ -242,3 +242,4 @@ export default function TeacherDashboard() {
     </div>
   );
 }
+
