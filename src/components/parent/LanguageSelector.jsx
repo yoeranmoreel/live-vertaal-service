@@ -3,7 +3,7 @@ import React, { useEffect, useState } from "react";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Languages, Loader2 } from "lucide-react";
-import { translationApi } from "@/api/sheetsClient";
+import { translationApi } from "@/services/sheetsClient";
 
 // Spijkenisse/Rotterdam prioriteit talen (bovenaan de lijst)
 const priorityLanguages = [
@@ -100,3 +100,4 @@ export default function LanguageSelector({ selectedLanguage, onSelect }) {
     </div>
   );
 }
+
