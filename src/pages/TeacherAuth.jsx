@@ -200,4 +200,146 @@ export default function TeacherAuth() {
                   <Input
                     type="email"
                     value={email}
-                    disabl
+                    disabled={loading}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="naam@school.nl"
+                  />
+                </div>
+
+                {/* Password */}
+                <div>
+                  <Label className="font-medium flex items-center gap-2 mb-1">
+                    <Lock className="w-4 h-4 text-indigo-600" />
+                    Wachtwoord
+                  </Label>
+                  <Input
+                    type="password"
+                    disabled={loading}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••"
+                  />
+                </div>
+
+                {/* Submit */}
+                <Button className="w-full py-6 text-lg" disabled={loading}>
+                  {loading ? (
+                    <>
+                      <Loader2 className="w-5 h-5 mr-2 animate-spin" /> Inloggen...
+                    </>
+                  ) : (
+                    "Inloggen"
+                  )}
+                </Button>
+              </motion.form>
+            ) : (
+              <motion.form
+                key="register-form"
+                initial={{ opacity: 0, x: 15 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -15 }}
+                onSubmit={handleRegister}
+                className="space-y-6"
+              >
+                {/* Full name */}
+                <div>
+                  <Label className="font-medium flex items-center gap-2 mb-1">
+                    <User className="w-4 h-4 text-indigo-600" />
+                    Volledige naam
+                  </Label>
+                  <Input
+                    type="text"
+                    disabled={loading}
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    placeholder="bijv. Jan Jansen"
+                  />
+                </div>
+
+                {/* Email */}
+                <div>
+                  <Label className="font-medium flex items-center gap-2 mb-1">
+                    <Mail className="w-4 h-4 text-indigo-600" />
+                    E-mailadres
+                  </Label>
+                  <Input
+                    type="email"
+                    disabled={loading}
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="naam@school.nl"
+                  />
+                </div>
+
+                {/* Password */}
+                <div>
+                  <Label className="font-medium flex items-center gap-2 mb-1">
+                    <Lock className="w-4 h-4 text-indigo-600" />
+                    Wachtwoord
+                  </Label>
+                  <Input
+                    type="password"
+                    disabled={loading}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Minimaal 6 karakters"
+                  />
+                </div>
+
+                {/* Confirm */}
+                <div>
+                  <Label className="font-medium flex items-center gap-2 mb-1">
+                    <Lock className="w-4 h-4 text-indigo-600" />
+                    Bevestig wachtwoord
+                  </Label>
+                  <Input
+                    type="password"
+                    disabled={loading}
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    placeholder="Herhaal wachtwoord"
+                  />
+                </div>
+
+                <Button className="w-full py-6 text-lg" disabled={loading}>
+                  {loading ? (
+                    <>
+                      <Loader2 className="w-5 h-5 mr-2 animate-spin" /> Account aanmaken...
+                    </>
+                  ) : (
+                    "Account aanmaken"
+                  )}
+                </Button>
+              </motion.form>
+            )}
+          </AnimatePresence>
+
+          {/* SWITCH MODE */}
+          <div className="mt-6 text-center">
+            <button
+              disabled={loading}
+              className="text-indigo-600 hover:text-indigo-700 font-medium text-sm"
+              onClick={switchMode}
+            >
+              {mode === "login"
+                ? "Nog geen account? Registreren →"
+                : "← Terug naar inloggen"}
+            </button>
+          </div>
+
+          {/* BACK HOME */}
+          <div className="mt-6 pt-6 border-t border-gray-200">
+            <Button
+              onClick={() => navigate(createPageUrl("Home"))}
+              variant="ghost"
+              className="w-full rounded-xl"
+            >
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Terug naar home
+            </Button>
+          </div>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
