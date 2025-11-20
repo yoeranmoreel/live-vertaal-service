@@ -36,7 +36,7 @@ export default function TeacherDashboard() {
   const [isCreating, setIsCreating] = useState(false);
 
   // -------------------------------------
-  // AUTH CHECK (SECURE VERSION)
+  // AUTH CHECK — GEFIXT!
   // -------------------------------------
   useEffect(() => {
     async function verify() {
@@ -48,9 +48,15 @@ export default function TeacherDashboard() {
         return;
       }
 
-      const result = await teacherAuthClient.verify();
+      const verifyResponse = await teacherAuthClient.verify();
 
-      if (!result.valid) {
+      // Fix: support both {valid: true} and {data: {valid: true}}
+      const isValid =
+        verifyResponse?.valid ??
+        verifyResponse?.data?.valid ??
+        false;
+
+      if (!isValid) {
         navigate(createPageUrl("TeacherAuth"));
         return;
       }
@@ -62,7 +68,7 @@ export default function TeacherDashboard() {
     verify();
   }, [navigate]);
 
-  // Still verifying? → Show spinner
+  // Spinner while verifying
   if (isVerifying) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -72,7 +78,7 @@ export default function TeacherDashboard() {
   }
 
   // -------------------------------------
-  // LOAD SESSIONS FOR THIS TEACHER
+  // LOAD SESSIONS
   // -------------------------------------
   const { data: sessions = [], isLoading } = useQuery({
     queryKey: ["sessions", teacher.email],
@@ -125,9 +131,7 @@ export default function TeacherDashboard() {
     try {
       await createSessionMutation.mutateAsync();
     } catch (err) {
-      alert(
-        "Er ging iets mis bij het aanmaken van de sessie."
-      );
+      alert("Er ging iets mis bij het aanmaken van de sessie.");
       console.error(err);
     } finally {
       setIsCreating(false);
@@ -194,7 +198,6 @@ export default function TeacherDashboard() {
 
       {/* STATS */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-        {/* Active sessions */}
         <StatCard
           delay={0.1}
           icon={<Play className="w-6 h-6 text-white" />}
@@ -202,8 +205,6 @@ export default function TeacherDashboard() {
           value={activeSessions.length}
           colors="from-emerald-400 to-emerald-600"
         />
-
-        {/* Total */}
         <StatCard
           delay={0.2}
           icon={<History className="w-6 h-6 text-white" />}
@@ -211,8 +212,6 @@ export default function TeacherDashboard() {
           value={sessions.length}
           colors="from-indigo-400 to-indigo-600"
         />
-
-        {/* Week */}
         <StatCard
           delay={0.3}
           icon={<Clock className="w-6 h-6 text-white" />}
@@ -220,8 +219,6 @@ export default function TeacherDashboard() {
           value={weekAgoSessions.length}
           colors="from-sky-400 to-sky-600"
         />
-
-        {/* Participants */}
         <StatCard
           delay={0.4}
           icon={<Users className="w-6 h-6 text-white" />}
@@ -252,7 +249,6 @@ export default function TeacherDashboard() {
   );
 }
 
-// Reusable components for cleaner JSX
 function StatCard({ delay, icon, title, value, colors }) {
   return (
     <motion.div
