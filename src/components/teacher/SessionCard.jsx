@@ -2,7 +2,7 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { messagesApi } from "@/api/sheetsClient";
+import { messagesApi } from "@/services/sheetsClient";
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
@@ -224,3 +224,4 @@ export default function SessionCard({ session, isActive = false }) {
     </>
   );
 }
+
