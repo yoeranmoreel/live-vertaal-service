@@ -246,7 +246,7 @@ export default function TeacherDashboard() {
       {activeSessions.length > 0 && (
         <Section title="Actieve Sessie" icon={<Play className="w-5 h-5 text-emerald-500" />}>
           {activeSessions.map((s) => (
-            <SessionCard key={s.id} session={s} isActive />
+            <div>ACTIVE SESSION CARD OK</div>
           ))}
         </Section>
       )}
@@ -256,7 +256,7 @@ export default function TeacherDashboard() {
         {endedSessions.length === 0 ? (
           <EmptyHistory />
         ) : (
-          endedSessions.map((s) => <SessionCard key={s.id} session={s} />)
+          endedSessions.map((s) => <div>ENDED SESSION CARD OK</div> )
         )}
       </Section>
     </div>
@@ -304,3 +304,4 @@ function EmptyHistory() {
     </div>
   );
 }
+
