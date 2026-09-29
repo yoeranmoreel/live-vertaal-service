@@ -1,57 +1,18 @@
-import React from 'react'
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
-import Layout from './Layout'
-import { createPageUrl } from './utils'
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import PilotHome from './pages/PilotHome'
+import ParentJoinV3 from './pages/ParentJoinV3'
+import TeacherWorkspace from './pages/TeacherWorkspace'
 import './index.css'
 
-// Pages
-import Home from './pages/Home'
-import TeacherAuth from './pages/TeacherAuth'
-import TeacherDashboard from './pages/TeacherDashboard'
-import TeacherLive from './pages/TeacherLive'
-import ParentJoin from './pages/ParentJoin'
-import ParentView from './pages/ParentView'
-
-// NEW
-import ProtectedRoute from '@/components/auth/ProtectedRoute'
-
-function App() {
+export default function App() {
   return (
-    <Router>
-      <Layout>
-        <Routes>
-          <Route path={createPageUrl("Home")} element={<Home />} />
-          <Route path={createPageUrl("TeacherAuth")} element={<TeacherAuth />} />
-
-          {/* PROTECTED ROUTES */}
-          <Route
-            path={createPageUrl("TeacherDashboard")}
-            element={
-              <ProtectedRoute>
-                <TeacherDashboard />
-              </ProtectedRoute>
-            }
-          />
-
-          <Route
-            path={createPageUrl("TeacherLive")}
-            element={
-              <ProtectedRoute>
-                <TeacherLive />
-              </ProtectedRoute>
-            }
-          />
-
-          {/* Public */}
-          <Route path={createPageUrl("ParentJoin")} element={<ParentJoin />} />
-          <Route path={createPageUrl("ParentView")} element={<ParentView />} />
-
-          {/* Redirect unknown routes */}
-          <Route path="*" element={<Home />} />
-        </Routes>
-      </Layout>
-    </Router>
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<PilotHome />} />
+        <Route path="/teacher" element={<TeacherWorkspace />} />
+        <Route path="/join/:publicCode" element={<ParentJoinV3 />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </BrowserRouter>
   )
 }
-
-export default App
