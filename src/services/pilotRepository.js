@@ -43,7 +43,14 @@ export function subscribePublicSession(publicCode,onData,onError=console.error){
  return onSnapshot(doc(db,'publicSessions',publicCode),s=>onData(s.exists()?{id:s.id,...s.data()}:null),onError)
 }
 export async function joinPublicSession(publicCode,participantId,languageCode){
- await setDoc(doc(db,'publicSessions',publicCode,'participants',participantId),{participantId,languageCode,joinedAt:serverTimestamp(),lastSeenAt:serverTimestamp()},{merge:true})
+ const participantRef=doc(db,'publicSessions',publicCode,'participants',participantId)
+ const { getDoc } = await import('firebase/firestore')
+ const existing = await getDoc(participantRef)
+ if(existing.exists()){
+  await updateDoc(participantRef,{languageCode,lastSeenAt:serverTimestamp()})
+  return
+ }
+ await setDoc(participantRef,{participantId,languageCode,joinedAt:serverTimestamp(),lastSeenAt:serverTimestamp()})
 }
 export async function touchPresence(publicCode,participantId,languageCode){
  await setDoc(doc(db,'publicSessions',publicCode,'participants',participantId),{participantId,languageCode,lastSeenAt:serverTimestamp()},{merge:true})
