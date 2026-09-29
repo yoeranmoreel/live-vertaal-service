@@ -1,12 +1,12 @@
 import { db, firebaseConfigured } from './firebase'
-import { addDoc, collection, doc, onSnapshot, orderBy, query, serverTimestamp, updateDoc } from 'firebase/firestore'
+import { addDoc, collection, doc, onSnapshot, orderBy, query, serverTimestamp, setDoc, updateDoc, writeBatch } from 'firebase/firestore'
 const DEMO_KEY='lvs:v3:demo-data'
 export const PILOT_SCHOOL_ID='school-demo'
-const seed={school:{id:PILOT_SCHOOL_ID,name:'Basisschool De Horizon'},teacher:{id:'teacher-demo',displayName:'Melissa',role:'teacher'},groups:[{id:'groep-3a',name:'Groep 3A',teacherNames:['Melissa','Jolka']},{id:'groep-4',name:'Groep 4',teacherNames:['Melissa']}],sessions:[{id:'welcome-3a',groupId:'groep-3a',title:'Kennismakingsavond',scheduledDate:'2026-09-03',scheduledStartTime:'19:00',status:'ended',publicCode:'K3A903',summaryEnabled:true,participantCount:14},{id:'info-3a',groupId:'groep-3a',title:'Informatieavond',scheduledDate:'2026-10-08',scheduledStartTime:'19:00',status:'planned',publicCode:'K3A108',summaryEnabled:true,participantCount:0}]}
+const seed={school:{id:PILOT_SCHOOL_ID,name:'Basisschool De Horizon'},teacher:{id:'teacher-demo',displayName:'Melissa',role:'teacher'},groups:[],sessions:[]}
 const cloneSeed=()=>JSON.parse(JSON.stringify(seed))
 function readDemo(){try{const stored=localStorage.getItem(DEMO_KEY);return stored?JSON.parse(stored):cloneSeed()}catch{return cloneSeed()}}
 function writeDemo(data){localStorage.setItem(DEMO_KEY,JSON.stringify(data));window.dispatchEvent(new Event('lvs-demo-change'))}
-function makeCode(){const alphabet='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';return Array.from({length:10},()=>alphabet[Math.floor(Math.random()*alphabet.length)]).join('')}
+function makeCode(){const alphabet='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';return Array.from({length:16},()=>alphabet[Math.floor(Math.random()*alphabet.length)]).join('')}
 const mapSnapshot=snapshot=>snapshot.docs.map(item=>({id:item.id,...item.data()}))
 function firebaseWorkspaceError(error){if(error?.code==='permission-denied')return new Error('Je account heeft geen toegang tot deze schoolomgeving.');return error instanceof Error?error:new Error('De gedeelde schoolomgeving kon niet worden geladen.')}
 export function subscribeTeacherWorkspace(onData,onError=console.error){
@@ -16,6 +16,34 @@ export function subscribeTeacherWorkspace(onData,onError=console.error){
  const unsub=[onSnapshot(schoolRef,s=>{state.school=s.exists()?{id:s.id,...s.data()}:{id:PILOT_SCHOOL_ID,name:'Pilot-school'};emit()},fail),onSnapshot(groupsRef,s=>{state.groups=mapSnapshot(s);emit()},fail),onSnapshot(sessionsRef,s=>{state.sessions=mapSnapshot(s);emit()},fail)]
  return()=>unsub.forEach(fn=>fn())
 }
-export async function createPlannedSession(input){const payload={...input,publicCode:makeCode(),status:'planned',participantCount:0,createdAt:new Date().toISOString()};if(!firebaseConfigured||!db){const data=readDemo(),session={id:crypto.randomUUID(),...payload};data.sessions.push(session);writeDemo(data);return session}const ref=await addDoc(collection(db,'schools',PILOT_SCHOOL_ID,'sessions'),{...payload,createdAt:serverTimestamp()});return{id:ref.id,...payload}}
-export async function startSession(sessionId){if(!firebaseConfigured||!db){const data=readDemo(),session=data.sessions.find(item=>item.id===sessionId);if(!session)throw new Error('Sessie niet gevonden');session.status='live';session.startedAt=new Date().toISOString();writeDemo(data);return session}await updateDoc(doc(db,'schools',PILOT_SCHOOL_ID,'sessions',sessionId),{status:'live',startedAt:serverTimestamp()})}
+export async function createPlannedSession(input){
+ const publicCode=makeCode(),payload={...input,publicCode,status:'planned',participantCount:0,createdAt:new Date().toISOString()}
+ if(!firebaseConfigured||!db){const data=readDemo(),session={id:crypto.randomUUID(),...payload};data.sessions.push(session);writeDemo(data);return session}
+ const sessionRef=doc(collection(db,'schools',PILOT_SCHOOL_ID,'sessions'))
+ const publicRef=doc(db,'publicSessions',publicCode)
+ const batch=writeBatch(db)
+ batch.set(sessionRef,{...payload,createdAt:serverTimestamp()})
+ batch.set(publicRef,{sessionId:sessionRef.id,schoolId:PILOT_SCHOOL_ID,groupId:input.groupId,title:input.title,scheduledDate:input.scheduledDate,scheduledStartTime:input.scheduledStartTime,status:'planned',createdAt:serverTimestamp()})
+ await batch.commit()
+ return{id:sessionRef.id,...payload}
+}
+export async function startSession(sessionId){
+ if(!firebaseConfigured||!db){const data=readDemo(),session=data.sessions.find(item=>item.id===sessionId);if(!session)throw new Error('Sessie niet gevonden');session.status='live';session.startedAt=new Date().toISOString();writeDemo(data);return session}
+ const sessionRef=doc(db,'schools',PILOT_SCHOOL_ID,'sessions',sessionId)
+ await updateDoc(sessionRef,{status:'live',startedAt:serverTimestamp()})
+}
+export function subscribePublicSession(publicCode,onData,onError=console.error){
+ if(!firebaseConfigured||!db){onError(new Error('Firebase is niet verbonden.'));return()=>{}}
+ return onSnapshot(doc(db,'publicSessions',publicCode),s=>onData(s.exists()?{id:s.id,...s.data()}:null),onError)
+}
+export async function joinPublicSession(publicCode,participantId,languageCode){
+ await setDoc(doc(db,'publicSessions',publicCode,'participants',participantId),{participantId,languageCode,joinedAt:serverTimestamp(),lastSeenAt:serverTimestamp()},{merge:true})
+}
+export async function touchPresence(publicCode,participantId,languageCode){
+ await setDoc(doc(db,'publicSessions',publicCode,'participants',participantId),{participantId,languageCode,lastSeenAt:serverTimestamp()},{merge:true})
+}
+export function subscribeSessionParticipants(publicCode,onData,onError=console.error){
+ if(!publicCode||!db)return()=>{}
+ return onSnapshot(collection(db,'publicSessions',publicCode,'participants'),s=>onData(mapSnapshot(s)),onError)
+}
 export function resetDemoData(){localStorage.removeItem(DEMO_KEY);window.dispatchEvent(new Event('lvs-demo-change'))}
