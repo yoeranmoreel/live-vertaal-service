@@ -1,5 +1,5 @@
 import { db, firebaseConfigured } from './firebase'
-import { addDoc, collection, doc, onSnapshot, orderBy, query, serverTimestamp, setDoc, updateDoc, writeBatch } from 'firebase/firestore'
+import { addDoc, collection, doc, getDoc, onSnapshot, orderBy, query, serverTimestamp, setDoc, updateDoc, writeBatch } from 'firebase/firestore'
 const DEMO_KEY='lvs:v3:demo-data'
 export const PILOT_SCHOOL_ID='school-demo'
 const seed={school:{id:PILOT_SCHOOL_ID,name:'Basisschool De Horizon'},teacher:{id:'teacher-demo',displayName:'Melissa',role:'teacher'},groups:[],sessions:[]}
@@ -30,13 +30,16 @@ export async function createPlannedSession(input){
 export async function startSession(sessionId){
  if(!firebaseConfigured||!db){const data=readDemo(),session=data.sessions.find(item=>item.id===sessionId);if(!session)throw new Error('Sessie niet gevonden');session.status='live';session.startedAt=new Date().toISOString();writeDemo(data);return session}
  const sessionRef=doc(db,'schools',PILOT_SCHOOL_ID,'sessions',sessionId)
- const sessionSnap = await import('firebase/firestore').then(({ getDoc }) => getDoc(sessionRef))
- if (!sessionSnap.exists()) throw new Error('Sessie niet gevonden')
- const publicCode = sessionSnap.data().publicCode
- const batch = writeBatch(db)
- batch.update(sessionRef,{status:'live',startedAt:serverTimestamp()})
- batch.update(doc(db,'publicSessions',publicCode),{status:'live',startedAt:serverTimestamp()})
- await batch.commit()
+ const sessionSnap = await getDoc(sessionRef)
+ if(!sessionSnap.exists()) throw new Error('Sessie niet gevonden')
+ const publicCode=sessionSnap.data().publicCode
+ if(!publicCode) throw new Error('Deze sessie heeft geen publieke sessiecode.')
+ const publicRef=doc(db,'publicSessions',publicCode)
+ const publicSnap=await getDoc(publicRef)
+ if(!publicSnap.exists()) throw new Error('Publieke sessie niet gevonden.')
+ const startedAt=serverTimestamp()
+ await updateDoc(publicRef,{status:'live',startedAt})
+ await updateDoc(sessionRef,{status:'live',startedAt})
 }
 export function subscribePublicSession(publicCode,onData,onError=console.error){
  if(!firebaseConfigured||!db){onError(new Error('Firebase is niet verbonden.'));return()=>{}}
