@@ -30,7 +30,13 @@ export async function createPlannedSession(input){
 export async function startSession(sessionId){
  if(!firebaseConfigured||!db){const data=readDemo(),session=data.sessions.find(item=>item.id===sessionId);if(!session)throw new Error('Sessie niet gevonden');session.status='live';session.startedAt=new Date().toISOString();writeDemo(data);return session}
  const sessionRef=doc(db,'schools',PILOT_SCHOOL_ID,'sessions',sessionId)
- await updateDoc(sessionRef,{status:'live',startedAt:serverTimestamp()})
+ const sessionSnap = await import('firebase/firestore').then(({ getDoc }) => getDoc(sessionRef))
+ if (!sessionSnap.exists()) throw new Error('Sessie niet gevonden')
+ const publicCode = sessionSnap.data().publicCode
+ const batch = writeBatch(db)
+ batch.update(sessionRef,{status:'live',startedAt:serverTimestamp()})
+ batch.update(doc(db,'publicSessions',publicCode),{status:'live',startedAt:serverTimestamp()})
+ await batch.commit()
 }
 export function subscribePublicSession(publicCode,onData,onError=console.error){
  if(!firebaseConfigured||!db){onError(new Error('Firebase is niet verbonden.'));return()=>{}}
