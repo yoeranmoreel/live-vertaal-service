@@ -18,13 +18,14 @@ service cloud.firestore {
   }
   match /publicSessions/{publicCode}{
    allow read: if true;
-   allow create,update,delete: if signedIn() && canManageSchool(request.resource.data.schoolId);
+   allow create,update: if signedIn() && canManageSchool(request.resource.data.schoolId);
+   allow delete: if signedIn() && canManageSchool(resource.data.schoolId);
    match /participants/{participantId}{
     allow create: if request.resource.data.participantId==participantId
       && request.resource.data.keys().hasOnly(['participantId','languageCode','joinedAt','lastSeenAt'])
       && request.resource.data.languageCode in ['nl','en','ar','pl','tr','uk','bg','ro','de','fr'];
     allow update: if request.resource.data.participantId==participantId
-      && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['languageCode','lastSeenAt'])
+      && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['languageCode','joinedAt','lastSeenAt'])
       && request.resource.data.languageCode in ['nl','en','ar','pl','tr','uk','bg','ro','de','fr'];
     allow read: if signedIn() && canManageSchool(get(/databases/$(database)/documents/publicSessions/$(publicCode)).data.schoolId);
     allow delete: if signedIn() && canManageSchool(get(/databases/$(database)/documents/publicSessions/$(publicCode)).data.schoolId);
