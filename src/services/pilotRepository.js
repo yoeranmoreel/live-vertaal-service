@@ -41,6 +41,20 @@ export async function startSession(sessionId){
  await updateDoc(publicRef,{status:'live',startedAt})
  await updateDoc(sessionRef,{status:'live',startedAt})
 }
+export async function endSession(sessionId){
+ if(!firebaseConfigured||!db){const data=readDemo(),session=data.sessions.find(item=>item.id===sessionId);if(!session)throw new Error('Sessie niet gevonden');session.status='ended';session.endedAt=new Date().toISOString();writeDemo(data);return session}
+ const sessionRef=doc(db,'schools',PILOT_SCHOOL_ID,'sessions',sessionId)
+ const sessionSnap=await getDoc(sessionRef)
+ if(!sessionSnap.exists()) throw new Error('Sessie niet gevonden')
+ const publicCode=sessionSnap.data().publicCode
+ const endedAt=serverTimestamp()
+ if(publicCode){
+  const publicRef=doc(db,'publicSessions',publicCode)
+  const publicSnap=await getDoc(publicRef)
+  if(publicSnap.exists()) await updateDoc(publicRef,{status:'ended',endedAt})
+ }
+ await updateDoc(sessionRef,{status:'ended',endedAt})
+}
 export function subscribePublicSession(publicCode,onData,onError=console.error){
  if(!firebaseConfigured||!db){onError(new Error('Firebase is niet verbonden.'));return()=>{}}
  return onSnapshot(doc(db,'publicSessions',publicCode),s=>onData(s.exists()?{id:s.id,...s.data()}:null),onError)
