@@ -1,52 +1,39 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    function signedIn() {
-      return request.auth != null;
-    }
+    function signedIn() { return request.auth != null; }
+    function platformAdminPath() { return /databases/$(database)/documents/platformAdmins/$(request.auth.uid); }
+    function isPlatformAdmin() { return signedIn() && exists(platformAdminPath()); }
+    function memberPath(schoolId) { return /databases/$(database)/documents/schools/$(schoolId)/members/$(request.auth.uid); }
+    function isSchoolMember(schoolId) { return signedIn() && exists(memberPath(schoolId)); }
+    function memberRole(schoolId) { return get(memberPath(schoolId)).data.role; }
+    function canManageSchool(schoolId) { return isPlatformAdmin() || (isSchoolMember(schoolId) && memberRole(schoolId) in ['teacher', 'schoolAdmin']); }
+    function isSchoolAdmin(schoolId) { return isPlatformAdmin() || (isSchoolMember(schoolId) && memberRole(schoolId) == 'schoolAdmin'); }
 
-    function memberPath(schoolId) {
-      return /databases/$(database)/documents/schools/$(schoolId)/members/$(request.auth.uid);
-    }
-
-    function isSchoolMember(schoolId) {
-      return signedIn() && exists(memberPath(schoolId));
-    }
-
-    function memberRole(schoolId) {
-      return get(memberPath(schoolId)).data.role;
-    }
-
-    function canManageSchool(schoolId) {
-      return isSchoolMember(schoolId) && memberRole(schoolId) in ['teacher', 'schoolAdmin'];
+    match /platformAdmins/{uid} {
+      allow read: if signedIn() && (request.auth.uid == uid || isPlatformAdmin());
+      allow write: if isPlatformAdmin();
     }
 
     match /schools/{schoolId} {
-      allow read: if isSchoolMember(schoolId);
-      allow write: if isSchoolMember(schoolId) && memberRole(schoolId) == 'schoolAdmin';
+      allow read: if isPlatformAdmin() || isSchoolMember(schoolId);
+      allow write: if isPlatformAdmin() || isSchoolAdmin(schoolId);
 
       match /members/{memberId} {
-        allow read: if isSchoolMember(schoolId);
-        allow write: if isSchoolMember(schoolId) && memberRole(schoolId) == 'schoolAdmin';
+        allow read: if isPlatformAdmin() || isSchoolMember(schoolId);
+        allow write: if isSchoolAdmin(schoolId);
       }
-
       match /groups/{groupId} {
-        allow read: if isSchoolMember(schoolId);
-        allow write: if isSchoolMember(schoolId) && memberRole(schoolId) == 'schoolAdmin';
+        allow read: if isPlatformAdmin() || isSchoolMember(schoolId);
+        allow write: if isSchoolAdmin(schoolId);
       }
-
       match /sessions/{sessionId} {
         allow read, create, update: if canManageSchool(schoolId);
-        allow delete: if isSchoolMember(schoolId) && memberRole(schoolId) == 'schoolAdmin';
-
-        match /{document=**} {
-          allow read, write: if false;
-        }
+        allow delete: if isSchoolAdmin(schoolId);
+        match /{document=**} { allow read, write: if false; }
       }
     }
 
-    match /{document=**} {
-      allow read, write: if false;
-    }
+    match /{document=**} { allow read, write: if false; }
   }
 }
