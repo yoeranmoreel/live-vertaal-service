@@ -1,39 +1,35 @@
 rules_version = '2';
 service cloud.firestore {
-  match /databases/{database}/documents {
-    function signedIn() { return request.auth != null; }
-    function platformAdminPath() { return /databases/$(database)/documents/platformAdmins/$(request.auth.uid); }
-    function isPlatformAdmin() { return signedIn() && exists(platformAdminPath()); }
-    function memberPath(schoolId) { return /databases/$(database)/documents/schools/$(schoolId)/members/$(request.auth.uid); }
-    function isSchoolMember(schoolId) { return signedIn() && exists(memberPath(schoolId)); }
-    function memberRole(schoolId) { return get(memberPath(schoolId)).data.role; }
-    function canManageSchool(schoolId) { return isPlatformAdmin() || (isSchoolMember(schoolId) && memberRole(schoolId) in ['teacher', 'schoolAdmin']); }
-    function isSchoolAdmin(schoolId) { return isPlatformAdmin() || (isSchoolMember(schoolId) && memberRole(schoolId) == 'schoolAdmin'); }
-
-    match /platformAdmins/{uid} {
-      allow read: if signedIn() && (request.auth.uid == uid || isPlatformAdmin());
-      allow write: if isPlatformAdmin();
-    }
-
-    match /schools/{schoolId} {
-      allow read: if isPlatformAdmin() || isSchoolMember(schoolId);
-      allow write: if isPlatformAdmin() || isSchoolAdmin(schoolId);
-
-      match /members/{memberId} {
-        allow read: if isPlatformAdmin() || isSchoolMember(schoolId);
-        allow write: if isSchoolAdmin(schoolId);
-      }
-      match /groups/{groupId} {
-        allow read: if isPlatformAdmin() || isSchoolMember(schoolId);
-        allow write: if isSchoolAdmin(schoolId);
-      }
-      match /sessions/{sessionId} {
-        allow read, create, update: if canManageSchool(schoolId);
-        allow delete: if isSchoolAdmin(schoolId);
-        match /{document=**} { allow read, write: if false; }
-      }
-    }
-
-    match /{document=**} { allow read, write: if false; }
+ match /databases/{database}/documents {
+  function signedIn(){return request.auth != null;}
+  function platformAdminPath(){return /databases/$(database)/documents/platformAdmins/$(request.auth.uid);}
+  function isPlatformAdmin(){return signedIn() && exists(platformAdminPath());}
+  function memberPath(schoolId){return /databases/$(database)/documents/schools/$(schoolId)/members/$(request.auth.uid);}
+  function isSchoolMember(schoolId){return signedIn() && exists(memberPath(schoolId));}
+  function memberRole(schoolId){return get(memberPath(schoolId)).data.role;}
+  function canManageSchool(schoolId){return isPlatformAdmin() || (isSchoolMember(schoolId) && memberRole(schoolId) in ['teacher','schoolAdmin']);}
+  function isSchoolAdmin(schoolId){return isPlatformAdmin() || (isSchoolMember(schoolId) && memberRole(schoolId)=='schoolAdmin');}
+  match /platformAdmins/{uid}{allow read: if signedIn()&&(request.auth.uid==uid||isPlatformAdmin());allow write: if isPlatformAdmin();}
+  match /schools/{schoolId}{
+   allow read: if isPlatformAdmin()||isSchoolMember(schoolId);allow write: if isPlatformAdmin()||isSchoolAdmin(schoolId);
+   match /members/{memberId}{allow read: if isPlatformAdmin()||isSchoolMember(schoolId);allow write: if isSchoolAdmin(schoolId);}
+   match /groups/{groupId}{allow read: if isPlatformAdmin()||isSchoolMember(schoolId);allow write: if isSchoolAdmin(schoolId);}
+   match /sessions/{sessionId}{allow read,create,update: if canManageSchool(schoolId);allow delete: if isSchoolAdmin(schoolId);match /{document=**}{allow read,write: if false;}}
   }
+  match /publicSessions/{publicCode}{
+   allow read: if true;
+   allow create,update,delete: if signedIn() && canManageSchool(request.resource.data.schoolId);
+   match /participants/{participantId}{
+    allow create: if request.resource.data.participantId==participantId
+      && request.resource.data.keys().hasOnly(['participantId','languageCode','joinedAt','lastSeenAt'])
+      && request.resource.data.languageCode in ['nl','en','ar','pl','tr','uk','bg','ro','de','fr'];
+    allow update: if request.resource.data.participantId==participantId
+      && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['languageCode','lastSeenAt'])
+      && request.resource.data.languageCode in ['nl','en','ar','pl','tr','uk','bg','ro','de','fr'];
+    allow read: if signedIn() && canManageSchool(get(/databases/$(database)/documents/publicSessions/$(publicCode)).data.schoolId);
+    allow delete: if signedIn() && canManageSchool(get(/databases/$(database)/documents/publicSessions/$(publicCode)).data.schoolId);
+   }
+  }
+  match /{document=**}{allow read,write: if false;}
+ }
 }
