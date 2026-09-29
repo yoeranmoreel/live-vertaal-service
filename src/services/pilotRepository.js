@@ -1,10 +1,20 @@
 import { db, firebaseConfigured } from './firebase'
-import { addDoc, collection, getDocs, orderBy, query, serverTimestamp, updateDoc, doc } from 'firebase/firestore'
+import {
+  addDoc,
+  collection,
+  doc,
+  onSnapshot,
+  orderBy,
+  query,
+  serverTimestamp,
+  updateDoc,
+} from 'firebase/firestore'
 
 const DEMO_KEY = 'lvs:v3:demo-data'
+export const PILOT_SCHOOL_ID = 'school-demo'
 
 const seed = {
-  school: { id: 'school-demo', name: 'Basisschool De Horizon' },
+  school: { id: PILOT_SCHOOL_ID, name: 'Basisschool De Horizon' },
   teacher: { id: 'teacher-demo', displayName: 'Melissa', role: 'teacher' },
   groups: [
     { id: 'groep-3a', name: 'Groep 3A', teacherNames: ['Melissa', 'Jolka'] },
@@ -16,12 +26,16 @@ const seed = {
   ],
 }
 
+function cloneSeed() {
+  return JSON.parse(JSON.stringify(seed))
+}
+
 function readDemo() {
   try {
     const stored = localStorage.getItem(DEMO_KEY)
-    return stored ? JSON.parse(stored) : structuredClone(seed)
+    return stored ? JSON.parse(stored) : cloneSeed()
   } catch {
-    return structuredClone(seed)
+    return cloneSeed()
   }
 }
 
@@ -32,16 +46,60 @@ function writeDemo(data) {
 
 function makeCode() {
   const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
-  return Array.from({ length: 6 }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join('')
+  return Array.from({ length: 10 }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join('')
 }
 
-export async function getTeacherWorkspace() {
-  if (!firebaseConfigured || !db) return readDemo()
+function mapSnapshot(snapshot) {
+  return snapshot.docs.map((item) => ({ id: item.id, ...item.data() }))
+}
 
-  // Pilot Firestore path. Auth/group security rules are connected in the auth batch.
-  const schoolId = 'school-demo'
-  const sessionsSnap = await getDocs(query(collection(db, 'schools', schoolId, 'sessions'), orderBy('scheduledDate', 'desc')))
-  return { ...seed, sessions: sessionsSnap.docs.map((item) => ({ id: item.id, ...item.data() })) }
+function firebaseWorkspaceError(error) {
+  if (error?.code === 'permission-denied') {
+    return new Error('Firebase is gekoppeld, maar deze browser heeft nog geen leerkrachttoegang. Dat zetten we in de auth-stap aan.')
+  }
+  return error instanceof Error ? error : new Error('De gedeelde schoolomgeving kon niet worden geladen.')
+}
+
+export function subscribeTeacherWorkspace(onData, onError = console.error) {
+  if (!firebaseConfigured || !db) {
+    const emit = () => onData(readDemo())
+    emit()
+    window.addEventListener('lvs-demo-change', emit)
+    return () => window.removeEventListener('lvs-demo-change', emit)
+  }
+
+  const schoolRef = doc(db, 'schools', PILOT_SCHOOL_ID)
+  const groupsRef = query(collection(db, 'schools', PILOT_SCHOOL_ID, 'groups'), orderBy('name'))
+  const sessionsRef = query(collection(db, 'schools', PILOT_SCHOOL_ID, 'sessions'), orderBy('scheduledDate', 'desc'))
+  const state = { school: null, groups: null, sessions: null }
+
+  const emitWhenReady = () => {
+    if (!state.school || !state.groups || !state.sessions) return
+    onData({
+      school: state.school,
+      teacher: seed.teacher,
+      groups: state.groups,
+      sessions: state.sessions,
+    })
+  }
+
+  const fail = (error) => onError(firebaseWorkspaceError(error))
+  const unsubscribers = [
+    onSnapshot(schoolRef, (snapshot) => {
+      state.school = snapshot.exists() ? { id: snapshot.id, ...snapshot.data() } : { id: PILOT_SCHOOL_ID, name: 'Pilot-school' }
+      emitWhenReady()
+    }, fail),
+    onSnapshot(groupsRef, (snapshot) => {
+      state.groups = mapSnapshot(snapshot)
+      emitWhenReady()
+    }, fail),
+    onSnapshot(sessionsRef, (snapshot) => {
+      state.sessions = mapSnapshot(snapshot)
+      emitWhenReady()
+    }, fail),
+  ]
+
+  return () => unsubscribers.forEach((unsubscribe) => unsubscribe())
 }
 
 export async function createPlannedSession(input) {
@@ -61,8 +119,10 @@ export async function createPlannedSession(input) {
     return session
   }
 
-  const schoolId = 'school-demo'
-  const ref = await addDoc(collection(db, 'schools', schoolId, 'sessions'), { ...payload, createdAt: serverTimestamp() })
+  const ref = await addDoc(collection(db, 'schools', PILOT_SCHOOL_ID, 'sessions'), {
+    ...payload,
+    createdAt: serverTimestamp(),
+  })
   return { id: ref.id, ...payload }
 }
 
@@ -77,8 +137,10 @@ export async function startSession(sessionId) {
     return session
   }
 
-  const schoolId = 'school-demo'
-  await updateDoc(doc(db, 'schools', schoolId, 'sessions', sessionId), { status: 'live', startedAt: serverTimestamp() })
+  await updateDoc(doc(db, 'schools', PILOT_SCHOOL_ID, 'sessions', sessionId), {
+    status: 'live',
+    startedAt: serverTimestamp(),
+  })
 }
 
 export function resetDemoData() {
