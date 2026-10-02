@@ -1,5 +1,5 @@
 import { db, firebaseConfigured } from './firebase'
-import { collection, doc, getDoc, onSnapshot, orderBy, query, serverTimestamp, setDoc, updateDoc, writeBatch } from 'firebase/firestore'
+import { addDoc, collection, doc, getDoc, limit, onSnapshot, orderBy, query, serverTimestamp, setDoc, updateDoc, writeBatch } from 'firebase/firestore'
 const DEMO_KEY='lvs:v3:demo-data'
 export const PILOT_SCHOOL_ID='school-demo'
 const seed={school:{id:PILOT_SCHOOL_ID,name:'Basisschool De Horizon'},teacher:{id:'teacher-demo',displayName:'Melissa',role:'teacher'},groups:[],sessions:[]}
@@ -88,5 +88,16 @@ export async function touchPresence(publicCode,participantId,languageCode){
 export function subscribeSessionParticipants(publicCode,onData,onError=console.error){
  if(!publicCode||!db)return()=>{}
  return onSnapshot(collection(db,'publicSessions',publicCode,'participants'),s=>onData(mapSnapshot(s)),onError)
+}
+export async function publishPilotMessage(publicCode,texts){
+ if(!firebaseConfigured||!db)throw new Error('Firebase is niet verbonden.')
+ const clean=Object.fromEntries(Object.entries(texts||{}).filter(([,value])=>typeof value==='string'&&value.trim()).map(([code,value])=>[code,value.trim()]))
+ if(!clean.nl)throw new Error('Voer minimaal de Nederlandse tekst in.')
+ await addDoc(collection(db,'publicSessions',publicCode,'messages'),{texts:clean,createdAt:serverTimestamp()})
+}
+export function subscribePublicMessages(publicCode,onData,onError=console.error){
+ if(!firebaseConfigured||!db)return()=>{}
+ const messages=query(collection(db,'publicSessions',publicCode,'messages'),orderBy('createdAt','desc'),limit(30))
+ return onSnapshot(messages,s=>onData(mapSnapshot(s).reverse()),onError)
 }
 export function resetDemoData(){localStorage.removeItem(DEMO_KEY);window.dispatchEvent(new Event('lvs-demo-change'))}
