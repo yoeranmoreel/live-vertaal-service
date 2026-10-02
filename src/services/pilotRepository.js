@@ -1,12 +1,17 @@
 import { db, firebaseConfigured } from './firebase'
-import { addDoc, collection, doc, getDoc, onSnapshot, orderBy, query, serverTimestamp, setDoc, updateDoc, writeBatch } from 'firebase/firestore'
+import { collection, doc, getDoc, onSnapshot, orderBy, query, serverTimestamp, setDoc, updateDoc, writeBatch } from 'firebase/firestore'
 const DEMO_KEY='lvs:v3:demo-data'
 export const PILOT_SCHOOL_ID='school-demo'
 const seed={school:{id:PILOT_SCHOOL_ID,name:'Basisschool De Horizon'},teacher:{id:'teacher-demo',displayName:'Melissa',role:'teacher'},groups:[],sessions:[]}
 const cloneSeed=()=>JSON.parse(JSON.stringify(seed))
 function readDemo(){try{const stored=localStorage.getItem(DEMO_KEY);return stored?JSON.parse(stored):cloneSeed()}catch{return cloneSeed()}}
 function writeDemo(data){localStorage.setItem(DEMO_KEY,JSON.stringify(data));window.dispatchEvent(new Event('lvs-demo-change'))}
-function makeCode(){const alphabet='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';return Array.from({length:16},()=>alphabet[Math.floor(Math.random()*alphabet.length)]).join('')}
+function makeCode(){
+ const alphabet='ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+ const bytes=new Uint8Array(16)
+ crypto.getRandomValues(bytes)
+ return Array.from(bytes,byte=>alphabet[byte%alphabet.length]).join('')
+}
 const mapSnapshot=snapshot=>snapshot.docs.map(item=>({id:item.id,...item.data()}))
 function firebaseWorkspaceError(error){if(error?.code==='permission-denied')return new Error('Je account heeft geen toegang tot deze schoolomgeving.');return error instanceof Error?error:new Error('De gedeelde schoolomgeving kon niet worden geladen.')}
 export function subscribeTeacherWorkspace(onData,onError=console.error){
@@ -60,14 +65,22 @@ export function subscribePublicSession(publicCode,onData,onError=console.error){
  return onSnapshot(doc(db,'publicSessions',publicCode),s=>onData(s.exists()?{id:s.id,...s.data()}:null),onError)
 }
 export async function joinPublicSession(publicCode,participantId,languageCode){
- const participantRef=doc(db,'publicSessions',publicCode,'participants',participantId)
- const { getDoc } = await import('firebase/firestore')
- const existing = await getDoc(participantRef)
- if(existing.exists()){
-  await updateDoc(participantRef,{languageCode,lastSeenAt:serverTimestamp()})
-  return
+ // Parents are intentionally not allowed to read participant documents.
+ // A merge write works for both first join and returning visitors under the public presence rules.
+ await setDoc(doc(db,'publicSessions',publicCode,'participants',participantId),{
+  participantId,
+  languageCode,
+  lastSeenAt:serverTimestamp()
+ },{merge:true})
+}
+export async function syncPublicSessionStatus(session){
+ if(!firebaseConfigured||!db||!session?.publicCode||!session?.status)return
+ const publicRef=doc(db,'publicSessions',session.publicCode)
+ const publicSnap=await getDoc(publicRef)
+ if(!publicSnap.exists())return
+ if(publicSnap.data().status!==session.status){
+  await updateDoc(publicRef,{status:session.status})
  }
- await setDoc(participantRef,{participantId,languageCode,joinedAt:serverTimestamp(),lastSeenAt:serverTimestamp()})
 }
 export async function touchPresence(publicCode,participantId,languageCode){
  await setDoc(doc(db,'publicSessions',publicCode,'participants',participantId),{participantId,languageCode,lastSeenAt:serverTimestamp()},{merge:true})
