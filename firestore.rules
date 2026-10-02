@@ -14,7 +14,14 @@ service cloud.firestore {
    allow read: if isPlatformAdmin()||isSchoolMember(schoolId);allow write: if isPlatformAdmin()||isSchoolAdmin(schoolId);
    match /members/{memberId}{allow read: if isPlatformAdmin()||isSchoolMember(schoolId);allow write: if isSchoolAdmin(schoolId);}
    match /groups/{groupId}{allow read: if isPlatformAdmin()||isSchoolMember(schoolId);allow write: if isSchoolAdmin(schoolId);}
-   match /sessions/{sessionId}{allow read,create,update: if canManageSchool(schoolId);allow delete: if isSchoolAdmin(schoolId);match /{document=**}{allow read,write: if false;}}
+   match /sessions/{sessionId}{
+    allow read,create,update: if canManageSchool(schoolId);allow delete: if isSchoolAdmin(schoolId);
+    match /transcript/{segmentId}{
+     allow read,create: if canManageSchool(schoolId);
+     allow update,delete: if false;
+    }
+    match /{document=**}{allow read,write: if false;}
+   }
   }
   match /publicSessions/{publicCode}{
    allow read: if true;
@@ -24,8 +31,10 @@ service cloud.firestore {
     allow read: if true;
     allow create: if signedIn()
       && canManageSchool(get(/databases/$(database)/documents/publicSessions/$(publicCode)).data.schoolId)
-      && request.resource.data.keys().hasOnly(['texts','createdAt'])
-      && request.resource.data.texts is map;
+      && request.resource.data.keys().hasOnly(['texts','sourceLanguage','mode','createdAt'])
+      && request.resource.data.texts is map
+      && request.resource.data.sourceLanguage == 'nl'
+      && request.resource.data.mode in ['demo','azure'];
     allow update,delete: if false;
    }
    match /participants/{participantId}{
