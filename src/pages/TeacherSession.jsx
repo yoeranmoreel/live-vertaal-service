@@ -2,11 +2,12 @@ import { useEffect,useMemo,useState } from 'react'
 import { Link,useNavigate,useParams } from 'react-router-dom'
 import QRCode from 'qrcode'
 import { ArrowLeft,CalendarDays,Copy,ExternalLink,Play,Users } from 'lucide-react'
-import { endSession,publishPilotMessage,startSession,subscribeSessionParticipants,subscribeTeacherWorkspace,syncPublicSessionStatus } from '../services/pilotRepository'
+import { appendTranscriptSegment,endSession,publishPilotMessage,startSession,subscribeSessionParticipants,subscribeSessionTranscript,subscribeTeacherWorkspace,syncPublicSessionStatus } from '../services/pilotRepository'
 import { getLanguage } from '../i18n/locales'
+import { demoPhrases,demoTranslate } from '../services/demoTranslation'
 export default function TeacherSession(){
  const {sessionId}=useParams(),navigate=useNavigate()
- const [data,setData]=useState(null),[error,setError]=useState(''),[qr,setQr]=useState(''),[participants,setParticipants]=useState([]),[presenceClock,setPresenceClock]=useState(Date.now()),[pilotText,setPilotText]=useState(''),[sending,setSending]=useState(false)
+ const [data,setData]=useState(null),[error,setError]=useState(''),[qr,setQr]=useState(''),[participants,setParticipants]=useState([]),[presenceClock,setPresenceClock]=useState(Date.now()),[pilotText,setPilotText]=useState(''),[sending,setSending]=useState(false),[transcript,setTranscript]=useState([])
  useEffect(()=>subscribeTeacherWorkspace(r=>{setData(r);setError('')},p=>setError(p.message)),[sessionId])
  const session=data?.sessions.find(s=>s.id===sessionId),group=data?.groups.find(g=>g.id===session?.groupId)
  const publicOrigin=(import.meta.env.VITE_PUBLIC_APP_ORIGIN||window.location.origin).replace(/\/$/,'')
@@ -14,6 +15,7 @@ export default function TeacherSession(){
  useEffect(()=>{if(joinUrl)QRCode.toDataURL(joinUrl,{width:420,margin:2}).then(setQr)},[joinUrl])
  useEffect(()=>session?.publicCode?subscribeSessionParticipants(session.publicCode,setParticipants,e=>setError(e.message)):()=>{},[session?.publicCode])
  useEffect(()=>{const timer=setInterval(()=>setPresenceClock(Date.now()),15000);return()=>clearInterval(timer)},[])
+ useEffect(()=>session?.id?subscribeSessionTranscript(session.id,setTranscript,e=>setError(e.message||'Transcript kon niet worden geladen.')):()=>{},[session?.id])
  useEffect(()=>{
   if(!session?.publicCode||!['live','ended'].includes(session.status))return
   syncPublicSessionStatus(session).catch(e=>setError(e.message||'Publieke sessiestatus kon niet worden hersteld.'))
@@ -31,7 +33,11 @@ export default function TeacherSession(){
   if(!pilotText.trim())return
   setSending(true)
   try{
-   await publishPilotMessage(session.publicCode,{nl:pilotText})
+   const source=pilotText.trim()
+   const targetCodes=Object.keys(languageCounts)
+   const texts={nl:source,...demoTranslate(source,targetCodes)}
+   await publishPilotMessage(session.publicCode,texts,{mode:'demo'})
+   await appendTranscriptSegment(session.id,source)
    setPilotText('')
   }catch(p){setError(p.message||'Testtekst versturen mislukt.')}finally{setSending(false)}
  }
@@ -42,6 +48,6 @@ export default function TeacherSession(){
  {session.status!=='ended'&&<div className="mt-8 grid gap-8 lg:grid-cols-[1fr_1.15fr]"><div className="rounded-2xl bg-white p-5 shadow-sm"><p className="text-sm font-semibold text-gray-500">Deelnemen</p><h2 className="mt-1 text-xl font-bold">Scan de QR-code óf open de link</h2>{qr&&<img src={qr} alt="QR-code" className="mx-auto mt-5 w-full max-w-[300px] rounded-xl"/>}</div>
  <div className="flex flex-col justify-center"><p className="text-sm font-semibold text-gray-500">Sessie-link</p><div className="mt-2 rounded-2xl border border-indigo-100 bg-indigo-50 p-5"><p className="break-all text-lg font-bold text-indigo-900">{joinUrl}</p><div className="mt-4 flex flex-wrap gap-2"><button onClick={()=>navigator.clipboard.writeText(joinUrl)} className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 font-semibold text-indigo-700"><Copy className="h-4 w-4"/>Kopiëren</button><a href={joinUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 font-semibold text-indigo-700"><ExternalLink className="h-4 w-4"/>Test ouderweergave</a></div></div>
  <div className="mt-5 rounded-2xl border border-gray-100 bg-white p-5"><div className="flex items-center gap-2"><Users className="h-5 w-5 text-indigo-600"/><strong>Wachtkamer · {activeParticipants.length} {activeParticipants.length===1?'deelnemer':'deelnemers'}</strong></div>{activeParticipants.length===0?<p className="mt-2 text-gray-500">Nog geen aangemelde ouders.</p>:<div className="mt-4 flex flex-wrap gap-2">{Object.entries(languageCounts).map(([code,count])=><span key={code} className="rounded-full bg-indigo-50 px-3 py-1.5 text-sm font-semibold text-indigo-700">{getLanguage(code).teacherName} · {count}</span>)}</div>}</div>
- {session.status==='planned'&&<button onClick={begin} className="mt-5 inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500 to-sky-500 px-6 py-4 text-lg font-bold text-white shadow-lg"><Play className="h-5 w-5"/>Start gesprek</button>}{session.status==='live'&&<><div className="mt-5 rounded-xl bg-emerald-100 p-4 font-semibold text-emerald-800">De sessie is live. Nieuwe ouders mogen nog steeds deelnemen.</div><div className="mt-4 rounded-2xl border border-indigo-100 bg-white p-4"><label className="text-sm font-bold text-gray-700" htmlFor="pilot-text">Live kanaal testen</label><p className="mt-1 text-sm text-gray-500">Stuur tijdelijk een Nederlandse testzin naar de ouderweergave. Spraak en automatische vertaling sluiten we hierna op hetzelfde kanaal aan.</p><div className="mt-3 flex gap-2"><input id="pilot-text" value={pilotText} onChange={e=>setPilotText(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')sendPilotText()}} placeholder="Bijvoorbeeld: Fijn dat u er bent." className="min-w-0 flex-1 rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-indigo-400"/><button type="button" disabled={sending||!pilotText.trim()} onClick={sendPilotText} className="rounded-xl bg-indigo-600 px-4 py-3 font-bold text-white disabled:opacity-40">{sending?'Versturen…':'Verstuur'}</button></div></div><button onClick={finish} className="mt-3 w-full rounded-xl border-2 border-red-200 bg-white px-6 py-3 font-bold text-red-700 hover:bg-red-50">Sessie stoppen</button></>}</div></div>}
+ {session.status==='planned'&&<button onClick={begin} className="mt-5 inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500 to-sky-500 px-6 py-4 text-lg font-bold text-white shadow-lg"><Play className="h-5 w-5"/>Start gesprek</button>}{session.status==='live'&&<><div className="mt-5 rounded-xl bg-emerald-100 p-4 font-semibold text-emerald-800">De sessie is live. Nieuwe ouders mogen nog steeds deelnemen.</div><div className="mt-4 rounded-2xl border border-indigo-100 bg-white p-4"><label className="text-sm font-bold text-gray-700" htmlFor="pilot-text">Live kanaal testen</label><p className="mt-1 text-sm text-gray-500">Pilotmodus vertaalt drie vaste voorbeeldzinnen voor alle talen die nu actief zijn. Andere tekst wordt duidelijk als DEMO gemarkeerd.</p><div className="mt-3 flex flex-wrap gap-2">{demoPhrases.map(phrase=><button key={phrase} type="button" onClick={()=>setPilotText(phrase)} className="rounded-lg bg-indigo-50 px-3 py-2 text-left text-sm font-semibold text-indigo-700">{phrase}</button>)}</div><div className="mt-3 flex gap-2"><input id="pilot-text" value={pilotText} onChange={e=>setPilotText(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')sendPilotText()}} placeholder="Bijvoorbeeld: Fijn dat u er bent." className="min-w-0 flex-1 rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-indigo-400"/><button type="button" disabled={sending||!pilotText.trim()} onClick={sendPilotText} className="rounded-xl bg-indigo-600 px-4 py-3 font-bold text-white disabled:opacity-40">{sending?'Versturen…':'Verstuur'}</button></div></div>{transcript.length>0&&<div className="mt-4 rounded-2xl border border-gray-100 bg-white p-4"><p className="text-sm font-bold text-gray-700">Nederlands transcript · {transcript.length} {transcript.length===1?'fragment':'fragmenten'}</p><div className="mt-3 max-h-40 space-y-2 overflow-y-auto">{transcript.map(item=><p key={item.id} className="rounded-lg bg-gray-50 px-3 py-2 text-sm text-gray-700">{item.sourceText}</p>)}</div></div>}<button onClick={finish} className="mt-3 w-full rounded-xl border-2 border-red-200 bg-white px-6 py-3 font-bold text-red-700 hover:bg-red-50">Sessie stoppen</button></>}</div></div>}
  </div></section></main>
 }
