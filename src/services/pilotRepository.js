@@ -89,11 +89,22 @@ export function subscribeSessionParticipants(publicCode,onData,onError=console.e
  if(!publicCode||!db)return()=>{}
  return onSnapshot(collection(db,'publicSessions',publicCode,'participants'),s=>onData(mapSnapshot(s)),onError)
 }
-export async function publishPilotMessage(publicCode,texts){
+export async function publishPilotMessage(publicCode,texts,meta={}){
  if(!firebaseConfigured||!db)throw new Error('Firebase is niet verbonden.')
  const clean=Object.fromEntries(Object.entries(texts||{}).filter(([,value])=>typeof value==='string'&&value.trim()).map(([code,value])=>[code,value.trim()]))
  if(!clean.nl)throw new Error('Voer minimaal de Nederlandse tekst in.')
- await addDoc(collection(db,'publicSessions',publicCode,'messages'),{texts:clean,createdAt:serverTimestamp()})
+ await addDoc(collection(db,'publicSessions',publicCode,'messages'),{texts:clean,sourceLanguage:'nl',mode:meta.mode||'demo',createdAt:serverTimestamp()})
+}
+export async function appendTranscriptSegment(sessionId,text){
+ if(!firebaseConfigured||!db)throw new Error('Firebase is niet verbonden.')
+ const sourceText=text?.trim()
+ if(!sourceText)return
+ await addDoc(collection(db,'schools',PILOT_SCHOOL_ID,'sessions',sessionId,'transcript'),{sourceText,sourceLanguage:'nl',createdAt:serverTimestamp()})
+}
+export function subscribeSessionTranscript(sessionId,onData,onError=console.error){
+ if(!firebaseConfigured||!db||!sessionId)return()=>{}
+ const transcript=query(collection(db,'schools',PILOT_SCHOOL_ID,'sessions',sessionId,'transcript'),orderBy('createdAt','asc'),limit(200))
+ return onSnapshot(transcript,s=>onData(mapSnapshot(s)),onError)
 }
 export function subscribePublicMessages(publicCode,onData,onError=console.error){
  if(!firebaseConfigured||!db)return()=>{}
