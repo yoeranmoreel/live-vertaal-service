@@ -2,15 +2,21 @@ import { useEffect,useMemo,useState } from 'react'
 import { Link,useNavigate,useParams } from 'react-router-dom'
 import QRCode from 'qrcode'
 import { ArrowLeft,CalendarDays,Copy,ExternalLink,Play,Users } from 'lucide-react'
-import { endSession,startSession,subscribeSessionParticipants,subscribeTeacherWorkspace } from '../services/pilotRepository'
+import { endSession,startSession,subscribeSessionParticipants,subscribeTeacherWorkspace,syncPublicSessionStatus } from '../services/pilotRepository'
 import { getLanguage } from '../i18n/locales'
 export default function TeacherSession(){
  const {sessionId}=useParams(),navigate=useNavigate()
  const [data,setData]=useState(null),[error,setError]=useState(''),[qr,setQr]=useState(''),[participants,setParticipants]=useState([])
  useEffect(()=>subscribeTeacherWorkspace(r=>{setData(r);setError('')},p=>setError(p.message)),[sessionId])
- const session=data?.sessions.find(s=>s.id===sessionId),group=data?.groups.find(g=>g.id===session?.groupId),joinUrl=session?`${window.location.origin}/join/${session.publicCode}`:''
+ const session=data?.sessions.find(s=>s.id===sessionId),group=data?.groups.find(g=>g.id===session?.groupId)
+ const publicOrigin=(import.meta.env.VITE_PUBLIC_APP_ORIGIN||window.location.origin).replace(/\/$/,'')
+ const joinUrl=session?`${publicOrigin}/join/${session.publicCode}`:''
  useEffect(()=>{if(joinUrl)QRCode.toDataURL(joinUrl,{width:420,margin:2}).then(setQr)},[joinUrl])
  useEffect(()=>session?.publicCode?subscribeSessionParticipants(session.publicCode,setParticipants,e=>setError(e.message)):()=>{},[session?.publicCode])
+ useEffect(()=>{
+  if(!session?.publicCode||!['live','ended'].includes(session.status))return
+  syncPublicSessionStatus(session).catch(e=>setError(e.message||'Publieke sessiestatus kon niet worden hersteld.'))
+ },[session?.id,session?.publicCode,session?.status])
  const languageCounts=useMemo(()=>participants.reduce((a,p)=>{a[p.languageCode]=(a[p.languageCode]||0)+1;return a},{}),[participants])
  if(error)return <div className="min-h-screen grid place-items-center p-5"><div className="max-w-lg rounded-2xl bg-white p-6 shadow-xl"><p className="font-bold">Sessie niet toegankelijk</p><p className="mt-2 text-gray-600">{error}</p><Link className="mt-4 inline-block text-indigo-600 underline" to="/teacher">Terug</Link></div></div>
  if(!data)return <div className="min-h-screen grid place-items-center">Sessie laden…</div>
