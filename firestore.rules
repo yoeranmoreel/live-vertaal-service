@@ -20,6 +20,14 @@ service cloud.firestore {
    allow read: if true;
    allow create,update: if signedIn() && canManageSchool(request.resource.data.schoolId);
    allow delete: if signedIn() && canManageSchool(resource.data.schoolId);
+   match /messages/{messageId}{
+    allow read: if true;
+    allow create: if signedIn()
+      && canManageSchool(get(/databases/$(database)/documents/publicSessions/$(publicCode)).data.schoolId)
+      && request.resource.data.keys().hasOnly(['texts','createdAt'])
+      && request.resource.data.texts is map;
+    allow update,delete: if false;
+   }
    match /participants/{participantId}{
     allow create: if request.resource.data.participantId==participantId
       && request.resource.data.keys().hasOnly(['participantId','languageCode','joinedAt','lastSeenAt'])
